@@ -1,0 +1,635 @@
+---
+/**
+ * @component SmartVideo
+ * @description A flexible component for rendering fullscreen or container-bound background videos.
+ * It handles the complexities of modern video playback, including HLS streaming with automatic
+ * fallbacks to standard MP4/WebM, and robust autoplay logic that respects browser policies.
+ *
+ * @feature Supports HLS streaming via `hls.js` for adaptive bitrate streaming.
+ * @feature Gracefully falls back to standard `<video>` sources (`.mp4`/`.webm`) if HLS is
+ *   unsupported or not provided.
+ * @feature Uses native HLS playback on Safari for optimal performance.
+ * @feature Intelligent autoplay: uses IntersectionObserver to play/pause when in view.
+ * @feature Optional play-on-hover functionality.
+ * @feature Includes a poster image (`<SmartImage>`) for fast initial paint and as a
+ *   fallback visual.
+ * @feature Injects SEO-friendly JSON-LD `VideoObject` schema if metadata is provided.
+ *
+ * @see https://github.com/video-dev/hls.js/ for HLS client-side library.
+ * @see https://developer.mozilla.org/en-US/docs/Web/API/Intersection_Observer_API
+ *
+ * @example
+ * <!-- With HLS and a fallback -->
+ * <SmartVideo
+ *   hlsSrc="/videos/stream/index.m3u8"
+ *   src="/videos/fallback/drone"
+ *   poster={posterImage}
+ *   class="h-[60vh]"
+ * />
+ *
+ * @example
+ * <!-- Play on hover only -->
+ * <SmartVideo
+ *   src="/videos/drone"
+ *   poster={posterImage}
+ *   playOnHover={true}
+ * />
+ */
+
+import type { ImageMetadata } from "astro";
+import { DEFAULT_DURATION_ISO } from "../constants";
+import SmartImage from "./SmartImage.astro";
+
+/**
+ * Defines the structured metadata for the video, used for generating
+ * a JSON-LD `VideoObject` schema for SEO purposes.
+ */
+interface MetadataProps {
+  /** A descriptive title for the video. */
+  title?: string;
+  /** A brief summary of the video's content. */
+  description?: string;
+  /** The duration of the video in ISO 8601 format (e.g., "PT1M30S"). */
+  duration?: string;
+  /** The original upload date of the video. */
+  uploadDate?: Date;
+  /** A URL to a thumbnail image. Defaults to the poster image if not provided. */
+  thumbnailUrl?: string;
+}
+
+export interface Props {
+  /**
+   * The base path for the fallback video files (without extension). The component
+   * will automatically append `.webm` and `.mp4` to create `<source>` elements.
+   * This is used if `hlsSrc` is not provided, or if HLS playback fails.
+   * @example "/videos/hero-fallback"
+   */
+  src?: string;
+
+  /**
+   * The URL to the HLS manifest file (`.m3u8`). If provided, the component will
+   * attempt to use `hls.js` for adaptive streaming.
+   */
+  hlsSrc?: string;
+
+  /**
+   * The poster image to display before the video loads. This can be a local
+   * `ImageMetadata` import or a remote URL string.
+   */
+  poster?: string | ImageMetadata;
+
+  /** A string of CSS classes to be applied to the root container `div`. */
+  class?: string;
+
+  /**
+   * Whether the video should attempt to play automatically.
+   * This is ignored if `playOnHover` is `true`.
+   * @default true
+   */
+  autoplay?: boolean;
+
+  /**
+   * Whether the video should loop continuously.
+   * @default true
+   */
+  loop?: boolean;
+
+  /**
+   * Whether the video should be muted. Autoplay in most modern browsers
+   * is only allowed for muted videos.
+   * @default true
+   */
+  muted?: boolean;
+
+  /**
+   * Whether to display the browser's default video controls.
+   * @default false
+   */
+  controls?: boolean;
+
+  /**
+   * The `playsinline` attribute, which is critical for preventing fullscreen
+   * playback on iOS devices.
+   * @default true
+   */
+  playsinline?: boolean;
+
+  /**
+   * How aggressively to preload the video resource.
+   * Defaults to `"metadata"` to limit bandwidth while keeping first-frame fast.
+   * @default "metadata"
+   */
+  preload?: "none" | "metadata" | "auto";
+
+  /**
+   * If `true`, the video will only play when the user hovers the mouse over it.
+   * The poster image is shown when the video is paused.
+   * @default false
+   */
+  playOnHover?: boolean;
+
+  /**
+   * Rich metadata for SEO (schema.org `VideoObject`). If provided, a
+   * `<script type="application/ld+json">` tag will be injected.
+   */
+  metadata?: MetadataProps;
+
+  // --- Poster <SmartImage> Props ---
+
+  /** Vignette radius to pass to the internal `<SmartImage>` poster (0–100). */
+  imgVignetteRadius?: number;
+  /** Vignette strength to pass to the internal `<SmartImage>` poster (0–1). */
+  imgVignetteStrength?: number;
+  /** `sizes` attribute for the poster image. */
+  imgSizes?: string;
+  /** `widths` attribute for the poster image. */
+  imgWidths?: number[];
+  /** `formats` attribute for the poster image. */
+  imgFormats?: Array<"avif" | "webp" | "png" | "jpg">;
+  /** `quality` attribute for the poster image. */
+  imgQuality?: number;
+
+  /**
+   * Framework-agnostic sizing behavior for the root container.
+   * - "fill": always set `width: 100%` and `height: 100%` inline on the root.
+   * - "none": do not set inline width/height; sizing is left entirely to the caller’s CSS.
+   * @default "fill"
+   */
+  sizeStrategy?: "fill" | "none";
+}
+
+// #region Extract and Process Props
+// ---
+
+const {
+  src,
+  hlsSrc,
+  poster,
+  class: className = "",
+  autoplay = true,
+  loop = true,
+  muted = true,
+  controls = false,
+  playsinline = true,
+  playOnHover = false,
+  preload = "metadata",
+  metadata,
+  imgVignetteRadius,
+  imgVignetteStrength,
+  imgSizes,
+  imgWidths,
+  imgFormats,
+  imgQuality,
+  sizeStrategy = "fill",
+} = Astro.props;
+
+// ---
+// #endregion
+
+// #region Helper Functions
+// ---
+
+/**
+ * A helper function to extract the `src` string from either a URL string
+ * or an `ImageMetadata` object.
+ * @param source The poster prop.
+ * @returns The string URL of the image source.
+ */
+function getSourceString(source: string | ImageMetadata): string {
+  return typeof source === "string" ? source : source.src;
+}
+
+const posterSrc = poster ? getSourceString(poster) : undefined;
+
+/**
+ * Compute inline style for the root container:
+ * - Always cap width via max-width for safety.
+ * - Inline width/height are controlled explicitly by `sizeStrategy`,
+ *   making this behavior framework-agnostic and predictable.
+ */
+const rootStyle = [
+  "position: relative;", // Ensure absolute children are anchored even without Tailwind.
+  "overflow: hidden;", // Clip poster/video without relying on Tailwind.
+  "max-width: 100%;",
+  sizeStrategy === "fill" ? "width: 100%;" : "",
+  sizeStrategy === "fill" ? "height: 100%;" : "",
+]
+  .filter(Boolean)
+  .join(" ");
+
+// ---
+// #endregion
+
+// #region SEO JSON-LD Schema
+// ---
+
+/**
+ * Construct the `VideoObject` for JSON-LD if metadata is provided.
+ * This helps search engines understand the content of the video.
+ */
+const videoMetadata = metadata && {
+  "@context": "https://schema.org",
+  "@type": "VideoObject",
+  name: metadata.title || "Background Video",
+  description: metadata.description || "Background video content",
+  thumbnailUrl: metadata.thumbnailUrl || posterSrc,
+  uploadDate: metadata.uploadDate ? metadata.uploadDate.toISOString() : new Date().toISOString(),
+  duration: metadata.duration || DEFAULT_DURATION_ISO,
+};
+
+// ---
+// #endregion
+---
+
+<!--
+  The root container passes all necessary configuration to the client-side script
+  via `data-*` attributes. This is a standard Astro pattern for hydrating components
+  with dynamic data without needing `define:vars`.
+-->
+<div
+  data-component="smart-video"
+  data-hls-src={hlsSrc ?? ""}
+  data-src-fallback={src ?? ""}
+  data-autoplay={autoplay ? "true" : "false"}
+  data-play-on-hover={playOnHover ? "true" : "false"}
+  class={`${className}`}
+  style={rootStyle}
+>
+  <!-- Inject the JSON-LD schema if it was created. -->
+  {videoMetadata && <script type="application/ld+json" set:html={JSON.stringify(videoMetadata)} />}
+
+  <!-- 
+    The poster element. It uses <SmartImage> for performance. It's positioned
+    absolutely to cover the video element until playback begins.
+  -->
+  {
+    poster && (
+      <div
+        data-poster
+        style="
+          position: absolute;
+          inset: 0;
+          z-index: 2; /* Ensure poster paints above <video> */
+          pointer-events: none; /* Overlay never blocks hover/clicks on container */
+          transition: opacity 150ms ease-out;
+        "
+      >
+        <SmartImage
+          src={poster}
+          alt={metadata?.title || "Video poster"}
+          loading="eager"
+          sizes={imgSizes}
+          widths={imgWidths}
+          formats={imgFormats}
+          quality={imgQuality}
+          vignetteRadius={imgVignetteRadius}
+          vignetteStrength={imgVignetteStrength}
+          style="width: 100%; height: 100%; object-fit: cover;"
+        />
+      </div>
+    )
+  }
+
+  <!-- 
+    The core HTML5 <video> element. It starts empty and is populated with <source>
+    elements by the client-side script.
+  -->
+  <video
+    data-video
+    preload={preload}
+    loop={loop ? true : undefined}
+    muted={muted ? true : undefined}
+    controls={controls ? true : undefined}
+    playsinline={playsinline ? true : undefined}
+    webkit-playsinline={playsinline ? true : undefined}
+    style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1;"
+  >
+    <!-- Fallback message for browsers that don't support the <video> tag. -->
+    <p>Your browser doesn't support HTML5 video.</p>
+  </video>
+</div>
+
+<!-- 
+  Client-Side Logic:
+  This script is processed by Astro as a module. It will only be included once per page,
+  even if multiple <SmartVideo> components are present. It queries for all component
+  instances and initializes them based on their unique `data-*` attributes.
+-->
+<script>
+  // Import the HLS.js library for adaptive streaming.
+  import type Hls from "hls.js";
+
+  /**
+   * Manages the state and interactions of a single SmartVideo component instance.
+   * This class encapsulates all client-side logic, including HLS playback,
+   * fallbacks, and IntersectionObserver-based autoplay.
+   */
+  class SmartVideoPlayer {
+    private _container: HTMLElement;
+    private _videoElement: HTMLVideoElement;
+    private _posterElement: HTMLElement | null;
+    private _hlsInstance: Hls | null = null;
+    private _observer: IntersectionObserver | null = null;
+
+    // Configuration flags read from data attributes
+    private _hlsSrc: string | null;
+    private _fallbackSrc: string | null;
+    private _playOnHover: boolean;
+    private _shouldAutoplay: boolean;
+    private _hlsFailed = false;
+
+    /**
+     * Initializes the player instance.
+     * @param {HTMLElement} container - The root `div` element of the component.
+     */
+    constructor(container: HTMLElement) {
+      this._container = container;
+      const videoEl = container.querySelector<HTMLVideoElement>("[data-video]");
+      const posterEl = container.querySelector<HTMLElement>("[data-poster]");
+
+      if (!videoEl) {
+        throw new Error("SmartVideoPlayer: A [data-video] element is required.");
+      }
+
+      this._videoElement = videoEl;
+      this._posterElement = posterEl;
+
+      // Read configuration from the container's data attributes.
+      this._hlsSrc = container.dataset.hlsSrc || null;
+      this._fallbackSrc = container.dataset.srcFallback || null;
+      this._playOnHover = container.dataset.playOnHover === "true";
+      this._shouldAutoplay = !this._playOnHover && container.dataset.autoplay === "true";
+
+      if (this._shouldAutoplay) {
+        this._videoElement.setAttribute("autoplay", "");
+      }
+    }
+
+    /**
+     * Sets up event listeners and initializes the appropriate video source
+     * (HLS or standard fallback).
+     */
+    public async initialize(): Promise<void> {
+      this._setupEventListeners();
+
+      const hlsInitialized = await this._initializeHLS();
+      if (!hlsInitialized) {
+        this._appendFallbackSources();
+      }
+
+      // Also attempt autoplay once the browser reports it can play.
+      // This covers both HLS and non-HLS (fallback) paths.
+      this._videoElement.addEventListener("canplay", () => this._maybeAutoplayOnReady(), { once: true });
+
+      // Autoplay logic is only enabled if hover-to-play is not active.
+      if (this._shouldAutoplay) {
+        this._initializeObserver();
+      }
+    }
+
+    /**
+     * Attempt autoplay if we're intersecting and autoplay is enabled.
+     * Called from readiness signals (HLS MANIFEST_PARSED, media 'canplay').
+     */
+    private _maybeAutoplayOnReady(): void {
+      if (!this._shouldAutoplay) {
+        return;
+      }
+
+      if (this._container.getAttribute("data-is-intersecting") === "true") {
+        this._attemptPlay();
+      }
+    }
+
+    /**
+     * Attempts to play the video, handling potential browser errors for blocked autoplay.
+     * It retries with the video muted if the initial attempt fails.
+     */
+    private _attemptPlay(): void {
+      const playPromise = this._videoElement.play();
+      if (playPromise) {
+        playPromise.catch((err) => {
+          console.info("SmartVideo: Autoplay was blocked. Muting and retrying.", err);
+          this._videoElement.muted = true;
+          this._videoElement.play().catch((err2) => {
+            console.info("SmartVideo: Muted autoplay also failed.", err2);
+          });
+        });
+      }
+    }
+
+    /**
+     * Sets up all necessary DOM event listeners for the component.
+     */
+    private _setupEventListeners(): void {
+      // Fade out the poster when the video starts playing.
+      this._videoElement.addEventListener("playing", () => {
+        if (this._posterElement) {
+          this._posterElement.style.opacity = "0";
+        }
+      });
+
+      // Show the poster again when paused if hover-to-play is enabled.
+      this._videoElement.addEventListener("pause", () => {
+        if (this._posterElement && this._playOnHover) {
+          this._posterElement.style.opacity = "1";
+        }
+      });
+
+      // Handle hover-based playback.
+      if (this._playOnHover) {
+        this._container.addEventListener("mouseenter", () => this._attemptPlay());
+        this._container.addEventListener("mouseleave", () => this._videoElement.pause());
+      }
+    }
+
+    /**
+     * Appends standard `<source>` elements for WebM and MP4 formats.
+     * This is used as a fallback if HLS is not supported or fails.
+     */
+    private _appendFallbackSources(): void {
+      if (!this._fallbackSrc) return;
+
+      // Clear any existing sources before adding new ones.
+      this._videoElement.innerHTML = "";
+
+      const sourceWebm = document.createElement("source");
+      sourceWebm.src = `${this._fallbackSrc}.webm`;
+      sourceWebm.type = "video/webm";
+      this._videoElement.appendChild(sourceWebm);
+
+      const sourceMp4 = document.createElement("source");
+      sourceMp4.src = `${this._fallbackSrc}.mp4`;
+      sourceMp4.type = "video/mp4";
+      this._videoElement.appendChild(sourceMp4);
+
+      // We need to tell the video element to load the new sources.
+      this._videoElement.load();
+    }
+
+    /**
+     * Shared helper to pivot from HLS to static <source> fallbacks.
+     * Ensures we do this exactly once and then re-attempt playback if we should be playing.
+     */
+    private _fallbackFromHls(): void {
+      // Mark that we should not attempt HLS again during this lifecycle.
+      this._hlsFailed = true;
+
+      // Tear down any active hls.js instance (no-op if null).
+      this._hlsInstance?.destroy();
+
+      // Surface playback path for diagnostics/inspection UIs.
+      this._container.setAttribute("data-playback-mode", "fallback");
+
+      // Clear any native src and switch to appended sources.
+      this._videoElement.removeAttribute("src");
+      this._appendFallbackSources();
+
+      // If we are visible and expected to autoplay, try to play now.
+      if (this._container.getAttribute("data-is-intersecting") === "true" && this._videoElement.paused) {
+        this._attemptPlay();
+      }
+    }
+
+    /**
+     * Initializes HLS playback if an HLS source is provided and the browser supports it.
+     * Uses native HLS when available; otherwise dynamically imports hls.js.
+     * @returns {Promise<boolean>} `true` if HLS was successfully initialized, `false` otherwise.
+     */
+    private async _initializeHLS(): Promise<boolean> {
+      if (!this._hlsSrc) return false;
+
+      // Safari on macOS and iOS has native HLS support.
+      if (this._videoElement.canPlayType("application/vnd.apple.mpegurl")) {
+        // Native path: set the src and guard with a watchdog so we don't hang forever in environments
+        // where canPlayType() is overly optimistic or codecs are unavailable (e.g., CI WebKit builds).
+        const v = this._videoElement;
+
+        let settled = false; // tracks whether ready or error fired
+        const settle = (): void => {
+          if (settled) return;
+          settled = true;
+          v.removeEventListener("loadedmetadata", onReady);
+          v.removeEventListener("canplay", onReady);
+          v.removeEventListener("error", onError);
+        };
+
+        const onReady = (): void => {
+          settle();
+          // Expose that native HLS is active.
+          this._container.setAttribute("data-playback-mode", "native-hls");
+          // Defer to normal ready → maybe autoplay flow.
+          this._maybeAutoplayOnReady();
+        };
+
+        const onError = (): void => {
+          settle();
+          console.warn("SmartVideo: Native HLS failed to become ready. Falling back to <source>.");
+          this._fallbackFromHls();
+        };
+
+        v.addEventListener("loadedmetadata", onReady, { once: true });
+        v.addEventListener("canplay", onReady, { once: true });
+        v.addEventListener("error", onError, { once: true });
+
+        // Assign after listeners in case the event fires immediately.
+        v.src = this._hlsSrc;
+
+        // Watchdog timeout as a last resort if neither ready nor error fires promptly.
+        window.setTimeout(() => {
+          if (!settled) onError();
+        }, 4000);
+
+        return true;
+      }
+
+      // Dynamically import hls.js only when needed to avoid blocking page load.
+      let HlsMod: Hls;
+
+      try {
+        HlsMod = await import("hls.js");
+      } catch (e) {
+        console.warn("SmartVideo: Failed to load hls.js module; using fallback sources.", e);
+        return false;
+      }
+
+      const Hls = HlsMod?.default;
+
+      // Use hls.js for other browsers that support Media Source Extensions.
+      if (Hls && Hls.isSupported()) {
+        this._hlsInstance = new Hls({
+          startLevel: -1,
+          startFragPrefetch: true,
+          autoStartLoad: true, // Let HLS manage loading, but observer will manage play state.
+        });
+
+        this._hlsInstance.loadSource(this._hlsSrc);
+        this._hlsInstance.attachMedia(this._videoElement);
+
+        // When the manifest is parsed, HLS is ready to start playback.
+        // If we're intersecting and autoplay is desired, try again now.
+        this._hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+          this._container.setAttribute("data-playback-mode", "hls.js");
+          this._maybeAutoplayOnReady();
+        });
+
+        this._hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+          console.error("SmartVideo: HLS.js error:", data.details);
+          if (data.fatal) {
+            console.warn("SmartVideo: HLS.js fatal error. Attempting to switch to fallback source.");
+            this._fallbackFromHls();
+          }
+        });
+
+        return true;
+      }
+
+      return false;
+    }
+
+    /**
+     * Sets up an IntersectionObserver to automatically play or pause the video
+     * when it enters or leaves the viewport.
+     */
+    private _initializeObserver(): void {
+      this._observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              this._container.setAttribute("data-is-intersecting", "true");
+              // Don't try to play if HLS has failed and we are waiting for fallback.
+              if (!this._hlsFailed) {
+                this._attemptPlay();
+              }
+            } else {
+              this._container.removeAttribute("data-is-intersecting");
+              this._videoElement.pause();
+            }
+          });
+        },
+        { threshold: 0.25 }, // Start playing when 25% of the video is visible.
+      );
+
+      this._observer.observe(this._videoElement);
+    }
+  }
+
+  /**
+   * IIFE to discover and initialize all SmartVideo components on the page.
+   */
+  (() => {
+    const containers = document.querySelectorAll<HTMLElement>('[data-component="smart-video"]');
+    if (!containers.length) {
+      return;
+    }
+
+    containers.forEach(async (container) => {
+      try {
+        const player = new SmartVideoPlayer(container);
+        await player.initialize();
+      } catch (error) {
+        console.error("SmartVideo: Failed to initialize player.", error);
+      }
+    });
+  })();
+</script>

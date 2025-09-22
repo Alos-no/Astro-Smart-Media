@@ -1,0 +1,230 @@
+---
+import DemoLayout from "../layouts/DemoLayout.astro";
+import Tabs from "../components/Tabs.astro";
+import DemoBlock from "../components/DemoBlock.astro";
+import InspectorTable from "../components/InspectorTable.astro";
+
+import { SmartVideo as SmartVideoDemo } from "@alos-no/astro-media";
+import posterImage from "../assets/poster.jpg";
+
+// Public test HLS source (Mux).
+const HLS = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
+---
+
+<DemoLayout title="Astro Media — SmartVideo">
+  <div class="callout">
+    <strong>SmartVideo</strong> demonstrates HLS with graceful fallbacks, autoplay-on-intersection, hover-to-play, and standard
+    controls. Each panel isolates a behavior to make validation easy. Inspectors update live with the player state.
+  </div>
+
+  <Tabs
+    tabs={[
+      { id: "autoplay", label: "Autoplay in viewport" },
+      { id: "hover", label: "Play on hover" },
+      { id: "controls", label: "User controls" },
+      { id: "fallback", label: "Fallback sources only" },
+    ]}
+    initialId="autoplay"
+  >
+    <Fragment slot="panels">
+      <!-- Panel: Autoplay in viewport -->
+      <section data-tab-panel="autoplay">
+        <DemoBlock
+          title="Autoplay with IntersectionObserver"
+          description="Scroll if needed; playback starts when ≥25% visible and pauses when out of view."
+        >
+          <!-- Spacer so the video starts below the fold; ensures intersection changes occur. -->
+          <div
+            style="height: 120vh; display: grid; place-items: center; color: #a7adb7; border: 1px dashed #22252a; margin-bottom: 0.75rem;"
+          >
+            <small>Scroll down to reach the video</small>
+          </div>
+
+          <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 0.75rem;">
+            <div id="sv-auto" style="width:100%; margin: 0 auto; aspect-ratio: 16 / 9; border:1px solid #22252a;">
+              <SmartVideoDemo
+                hlsSrc={HLS}
+                src="/videos/fallback"
+                poster={posterImage}
+                class=""
+                autoplay={true}
+                loop={true}
+                muted={true}
+              />
+            </div>
+
+            <InspectorTable id="sv-auto-inspector" title="Autoplay — Live inspector" />
+          </div>
+
+          <!-- Extra spacer so you can scroll past the video and watch it pause when out of view. -->
+          <div style="height: 120vh; border: 1px dashed #22252a; margin-top: 0.75rem;"></div>
+        </DemoBlock>
+      </section>
+
+      <!-- Panel: Hover -->
+      <section data-tab-panel="hover">
+        <DemoBlock title="Play on hover" description="Poster returns when paused after mouse leaves.">
+          <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 0.75rem;">
+            <div id="sv-hover" style="width:100%; margin: 0 auto; aspect-ratio: 16 / 9; border:1px solid #22252a;">
+              <SmartVideoDemo
+                hlsSrc={HLS}
+                src="/videos/fallback"
+                poster={posterImage}
+                class=""
+                playOnHover={true}
+                muted={true}
+                loop={true}
+              />
+            </div>
+
+            <InspectorTable id="sv-hover-inspector" title="Hover — Live inspector" />
+          </div>
+        </DemoBlock>
+      </section>
+
+      <!-- Panel: Controls -->
+      <section data-tab-panel="controls">
+        <DemoBlock title="Standard controls" description="Hand control to users; autoplay disabled.">
+          <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 0.75rem;">
+            <div id="sv-ctrl" style="width:100%; margin: 0 auto; aspect-ratio: 16 / 9; border:1px solid #22252a;">
+              <SmartVideoDemo
+                hlsSrc={HLS}
+                src="/videos/fallback"
+                poster={posterImage}
+                class=""
+                controls={true}
+                autoplay={false}
+                muted={false}
+              />
+            </div>
+
+            <InspectorTable id="sv-ctrl-inspector" title="Controls — Live inspector" />
+          </div>
+        </DemoBlock>
+      </section>
+
+      <!-- Panel: Fallback only -->
+      <section data-tab-panel="fallback">
+        <DemoBlock
+          title="No HLS → MP4/WebM sources"
+          description="Demonstrates the source appending and load() path without HLS."
+        >
+          <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 0.75rem;">
+            <div id="sv-fallback" style="width:100%; margin: 0 auto; aspect-ratio: 16 / 9; border:1px solid #22252a;">
+              <SmartVideoDemo
+                src="/videos/fallback"
+                poster={posterImage}
+                class=""
+                autoplay={false}
+                controls={true}
+                loop={false}
+              />
+            </div>
+
+            <InspectorTable id="sv-fallback-inspector" title="Fallback — Live inspector" />
+          </div>
+        </DemoBlock>
+      </section>
+    </Fragment>
+  </Tabs>
+</DemoLayout>
+
+<script>
+  // ---------- Shared helpers for SmartVideo inspectors ----------
+
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  function findSmartVideoContainer(root) {
+    return root.querySelector('[data-component="smart-video"]');
+  }
+
+  function updateInspector(tableId, rows) {
+    const tgt = byId(tableId);
+    if (!tgt) return;
+    tgt.dispatchEvent(new CustomEvent("inspector:update", { detail: { rows } }));
+  }
+
+  /**
+   * Initialize a live inspector for a SmartVideo wrapper box.
+   * Shows: container size, intersection state, autoplay/hover flags, playback mode,
+   * HTMLMediaElement readyState/networkState, paused/muted, intrinsic video size, time.
+   *
+   * References:
+   *  - IntersectionObserver (MDN)
+   *  - HTMLMediaElement.readyState / networkState (MDN)
+   *  - HTMLVideoElement.videoWidth/videoHeight (MDN)
+   *  - hls.js events MANIFEST_PARSED / ERROR (docs)
+   */
+  function initVideoInspector(wrapperId, tableId) {
+    const wrapper = byId(wrapperId);
+    if (!wrapper) return;
+
+    const container = findSmartVideoContainer(wrapper);
+    const video = container?.querySelector("video");
+
+    if (!container || !video) return;
+
+    const ro = new ResizeObserver(() => schedule());
+    ro.observe(wrapper);
+
+    const events = [
+      "loadedmetadata",
+      "canplay",
+      "play",
+      "pause",
+      "waiting",
+      "stalled",
+      "timeupdate",
+      "progress",
+      "ratechange",
+      "volumechange",
+      "emptied",
+      "ended",
+    ];
+    events.forEach((ev) => video.addEventListener(ev, () => schedule()));
+
+    let timer = window.setInterval(() => schedule(), 1000);
+    window.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        window.clearInterval(timer);
+      } else {
+        timer = window.setInterval(() => schedule(), 1000);
+      }
+    });
+
+    let scheduled = false;
+    const schedule = () => {
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(() => {
+        scheduled = false;
+
+        const rows = [
+          { label: "Container (CSS px)", value: `${wrapper.clientWidth}×${wrapper.clientHeight}` },
+          { label: "isIntersecting", value: container.getAttribute("data-is-intersecting") === "true" },
+          { label: "autoplay (data)", value: container.dataset.autoplay },
+          { label: "playOnHover (data)", value: container.dataset.playOnHover },
+          { label: "playback mode", value: container.getAttribute("data-playback-mode") || "(unknown)" },
+          { label: "readyState", value: String(video.readyState) },
+          { label: "networkState", value: String(video.networkState) },
+          { label: "paused", value: String(video.paused) },
+          { label: "muted", value: String(video.muted) },
+          { label: "video intrinsic (CSS px)", value: `${video.videoWidth}×${video.videoHeight}` },
+          { label: "currentTime", value: video.currentTime.toFixed(2) },
+        ];
+
+        updateInspector(tableId, rows);
+      });
+    };
+
+    schedule();
+  }
+
+  // Wire up all inspectors on this page.
+  initVideoInspector("sv-auto", "sv-auto-inspector");
+  initVideoInspector("sv-hover", "sv-hover-inspector");
+  initVideoInspector("sv-ctrl", "sv-ctrl-inspector");
+  initVideoInspector("sv-fallback", "sv-fallback-inspector");
+</script>

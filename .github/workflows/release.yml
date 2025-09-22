@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# prevent concurrent publishes per ref
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  test:
+    name: Pre-publish tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r run build
+
+      - name: Run unit tests
+        run: pnpm test
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run e2e tests
+        run: pnpm test:e2e
+
+  release:
+    name: Create Release PR or Publish
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write # for npm provenance if you enable it later
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node (npm registry auth)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r run build
+
+      - name: Create Release PR or Publish to npm
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          # If there are unpublished changesets: open/update a Release PR.
+          # If the commit is a release commit on main: run this publish command.
+          publish: pnpm ci:publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,0 +1,195 @@
+---
+/**
+ * DemoLayout
+ * A simple site-wide layout that provides a top navigation bar with tab-like links
+ * between demo pages, plus consistent base styles for readability.
+ *
+ * Props:
+ * - title?: string — Document title
+ *
+ * Note: This is intentionally minimal and framework-agnostic to keep the demo light.
+ */
+export interface Props {
+  title?: string;
+}
+
+const { title = "Astro Media Demo" } = Astro.props;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>{title}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          Helvetica,
+          Arial,
+          "Apple Color Emoji",
+          "Segoe UI Emoji";
+        background: #0b0b0c;
+        color: #f0f1f3;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      /* Fluid media defaults for demos: allow images/videos to scale with their containers.
+         This fixes "image/container fixed to original size" when resizing. */
+      img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+      }
+
+      picture {
+        display: block; /* So it participates like a block-level wrapper of the inner <img> */
+        max-width: 100%;
+      }
+
+      video {
+        display: block;
+        max-width: 100%;
+      }
+
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        backdrop-filter: saturate(120%) blur(10px);
+        background: rgba(16, 16, 18, 0.7);
+        border-bottom: 1px solid #22252a;
+      }
+
+      .container {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 1rem 1.25rem;
+      }
+
+      .brand {
+        display: flex;
+        align-items: baseline;
+        gap: 0.75rem;
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: 1.125rem;
+        font-weight: 600;
+        letter-spacing: 0.2px;
+      }
+
+      .brand .muted {
+        font-size: 0.9rem;
+        color: #a7adb7;
+      }
+
+      nav {
+        margin-top: 0.75rem;
+        display: flex;
+        gap: 0.5rem;
+        border-bottom: 1px solid #22252a;
+      }
+
+      .tablink {
+        display: inline-block;
+        padding: 0.5rem 0.9rem;
+        border: 1px solid #22252a;
+        border-bottom: none;
+        border-top-left-radius: 0.5rem;
+        border-top-right-radius: 0.5rem;
+        background: #15171a;
+        color: #cfd6df;
+        font-size: 0.95rem;
+      }
+
+      .tablink:hover {
+        background: #1a1d21;
+      }
+
+      .tablink.active {
+        background: #0f1114;
+        color: #fff;
+        border-color: #2b3138;
+      }
+
+      main.container {
+        padding-top: 1.25rem;
+        padding-bottom: 3rem;
+      }
+
+      .callout {
+        margin: 1rem 0 1.5rem;
+        padding: 0.75rem 1rem;
+        border: 1px solid #22252a;
+        border-radius: 0.5rem;
+        background: #101214;
+        color: #c6ccd6;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="container">
+        <div class="brand">
+          <h1>Alos Astro Media</h1>
+          <span class="muted">Demo & Examples</span>
+        </div>
+
+        <nav aria-label="Feature pages">
+          <a class={`tablink ${Astro.url.pathname === "/" ? "active" : ""}`} href="/">Overview</a>
+
+          <!-- Use strict equality so /smart-image-advanced does not also activate this link -->
+          <a class={`tablink ${Astro.url.pathname === "/smart-image" ? "active" : ""}`} href="/smart-image">
+            SmartImage
+          </a>
+
+          <!-- Advanced SmartImage page -->
+          <a
+            class={`tablink ${Astro.url.pathname.startsWith("/smart-image-advanced") ? "active" : ""}`}
+            href="/smart-image-advanced"
+          >
+            SmartImage Advanced
+          </a>
+
+          <!-- Use strict equality so /smart-video-advanced does not also activate this link -->
+          <a class={`tablink ${Astro.url.pathname === "/smart-video" ? "active" : ""}`} href="/smart-video">
+            SmartVideo
+          </a>
+
+          <!-- Advanced SmartVideo page -->
+          <a
+            class={`tablink ${Astro.url.pathname.startsWith("/smart-video-advanced") ? "active" : ""}`}
+            href="/smart-video-advanced"
+          >
+            SmartVideo Advanced
+          </a>
+
+          <a class="tablink" href="/smart-video-test">E2E Test Page</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <slot />
+    </main>
+  </body>
+</html>

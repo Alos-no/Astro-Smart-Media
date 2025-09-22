@@ -1,0 +1,121 @@
+---
+/**
+ * InspectorTable
+ * Lightweight inspector panel that displays key-value rows and updates
+ * live when a CustomEvent('inspector:update', { detail: { rows } }) is dispatched
+ * on the root element.
+ *
+ * Props:
+ * - id: string (required) — DOM id used both for the wrapper and as the event target
+ * - title?: string — Optional heading shown above the table
+ *
+ * Usage from a page:
+ *   <InspectorTable id="img-local-1-inspector" title="Live inspector" />
+ *   <script>
+ *     const root = document.getElementById('img-local-1-inspector');
+ *     root?.dispatchEvent(new CustomEvent('inspector:update', {
+ *       detail: { rows: [{ label: 'currentSrc', value: '...' }, ...] }
+ *     }));
+ *   </script>
+ */
+
+export interface Props {
+  id: string;
+  title?: string;
+}
+
+const { id, title = "Live inspector" } = Astro.props;
+---
+
+<style>
+  .inspector {
+    border: 1px solid #22252a;
+    border-radius: 0.5rem;
+    background: #0f1114;
+  }
+
+  .inspector h4 {
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.95rem;
+    border-bottom: 1px solid #22252a;
+    color: #e7ecf3;
+  }
+
+  .inspector table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+
+  .inspector th,
+  .inspector td {
+    border-top: 1px solid #1b1e23;
+    padding: 0.45rem 0.6rem;
+    vertical-align: top;
+  }
+
+  .inspector th {
+    width: 40%;
+    color: #aab2bd;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .inspector td {
+    color: #d7dce4;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    word-break: break-all;
+  }
+</style>
+
+<section class="inspector" id={id} data-inspector>
+  <h4>{title}</h4>
+  <table aria-live="polite" aria-atomic="true">
+    <thead>
+      <tr><th>Metric</th><th>Value</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<script>
+  // Minimal controller: this element updates whenever "inspector:update" is dispatched on it.
+  (() => {
+    const root = document.getElementById({ id: id });
+
+    if (!root) {
+      return;
+    }
+
+    /** Render helper: replace tbody rows from an array of {label, value} */
+    const render = (rows) => {
+      const tbody = root.querySelector("tbody");
+      if (!tbody) return;
+
+      // Build rows with safe textContent assignments.
+      tbody.innerHTML = "";
+      rows.forEach((row) => {
+        const tr = document.createElement("tr");
+
+        const th = document.createElement("th");
+        th.textContent = String(row?.label ?? "");
+        tr.appendChild(th);
+
+        const td = document.createElement("td");
+        td.textContent = typeof row?.value === "string" ? row.value : JSON.stringify(row?.value);
+        tr.appendChild(td);
+
+        tbody.appendChild(tr);
+      });
+    };
+
+    root.addEventListener("inspector:update", (e) => {
+      const rows = e?.detail?.rows ?? [];
+      if (Array.isArray(rows)) {
+        render(rows);
+      }
+    });
+  })();
+</script>

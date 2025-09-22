@@ -1,0 +1,266 @@
+---
+/**
+ * @component SmartImage
+ * @description A highly reusable, responsive image component for Astro projects, built
+ * on top of `astro:assets`. It simplifies generating multiple image formats (AVIF, WebP)
+ * and sizes, while providing sensible defaults and advanced features like a CSS-driven
+ * vignette effect.
+ *
+ * @feature Automatic responsive widths and `sizes` attribute generation for local images.
+ * @feature Supports modern formats (`avif`, `webp`) with graceful fallbacks.
+ * @feature Handles both local `ImageMetadata` objects and remote image URLs (string).
+ * @feature Optional, configurable vignette overlay.
+ * @feature Correctly handles CSS `border-radius` when a vignette is applied.
+ * @feature Sensible defaults for quality, formats, and loading behavior.
+ *
+ * @see https://docs.astro.build/en/guides/assets/ for `ImageMetadata` and `<Picture>` behavior.
+ *
+ * @example
+ * <!-- Basic usage with a local import -->
+ * import localImage from '../assets/hero.png';
+ * <SmartImage src={localImage} alt="A descriptive alt text." />
+ *
+ * @example
+ * <!-- Usage with a remote image URL -->
+ * <SmartImage src="https://example.com/image.jpg" alt="Remote image." />
+ *
+ * @example
+ * <!-- With a vignette effect and rounded corners -->
+ * <SmartImage
+ *   src={localImage}
+ *   alt="Image with a vignette."
+ *   class="rounded-lg"
+ *   vignetteRadius={60}
+ *   vignetteStrength={0.4}
+ * />
+ */
+
+import type { ImageMetadata } from "astro";
+import { Picture } from "astro:assets";
+import { DEFAULT_IMAGE_FORMATS, DEFAULT_IMAGE_QUALITY, DEFAULT_RESPONSIVE_WIDTHS } from "../constants";
+import { extractRoundedClasses, generateOptimalWidths, generateSizes, removeRoundedClasses } from "../utils/images";
+
+export interface Props {
+  /**
+   * The image source. This can be either an imported image asset (`ImageMetadata`)
+   * from your project's `src/` directory, or a URL string pointing to a remote image.
+   * When using a local import, `astro:assets` will optimize the image.
+   * When using a string, a standard `<img>` tag is rendered without optimization.
+   */
+  src: ImageMetadata | string;
+
+  /**
+   * The `alt` text for the image. This is crucial for accessibility and SEO.
+   * For purely decorative images, provide an empty string (`alt=""`).
+   */
+  alt: string;
+
+  /**
+   * The `sizes` attribute for the image, which helps the browser choose the best
+   * image from the `srcset` based on the current layout.
+   * If not provided, a default `sizes` attribute is generated based on the `widths`.
+   * @default "(min-width: 1024px) 100vw, 100vw" or generated from widths.
+   * @see https://developer.mozilla.org/en-US/docs/Web/HTML/Element/img#attr-sizes
+   */
+  sizes?: string;
+
+  /**
+   * An array of widths (in pixels) to generate for the responsive image.
+   * If `src` is a local image and `widths` is not provided, a set of optimal
+   * widths will be generated based on the image's original dimensions.
+   * @default [640, 750, 828, 1080, 1200, 1920, 2560] (or derived from image)
+   */
+  widths?: number[];
+
+  /**
+   * An array of image formats to generate. Astro's `<Picture>` component will
+   * create a `<source>` element for each format, ordered by preference.
+   * @default ['avif', 'webp']
+   */
+  formats?: Array<"avif" | "webp" | "png" | "jpg">;
+
+  /**
+   * The quality setting (1-100) for the generated images.
+   * @default 80
+   */
+  quality?: number;
+
+  /**
+   * A string of CSS classes to be applied to the root element.
+   * Note: If a vignette is active, `rounded-*` classes are intelligently moved
+   * to a wrapping container to ensure correct clipping of the effect.
+   */
+  class?: string;
+
+  /**
+   * Optional inline styles to apply to the underlying `<img>` / `<picture>` element.
+   * This is accepted so parent components can pass `style` through via `...props`.
+   */
+  style?: string;
+
+  /**
+   * The loading strategy for the image.
+   * - `lazy`: Defer loading until the image is about to enter the viewport. (Default)
+   * - `eager`: Load the image immediately. Use for critical, above-the-fold images.
+   * @default 'lazy'
+   */
+  loading?: "lazy" | "eager";
+
+  /**
+   * The radius of the vignette's transparent center, as a percentage (0-100).
+   * For the vignette to be applied, both `vignetteRadius` and `vignetteStrength`
+   * must be provided.
+   * @example 70
+   */
+  vignetteRadius?: number;
+
+  /**
+   * The opacity of the vignette's dark outer edge, from 0 (transparent) to 1 (opaque).
+   * For the vignette to be applied, both `vignetteRadius` and `vignetteStrength`
+   * must be provided.
+   * @example 0.5
+   */
+  vignetteStrength?: number;
+}
+
+const {
+  src,
+  alt,
+  sizes,
+  widths,
+  formats = DEFAULT_IMAGE_FORMATS as Props["formats"],
+  quality = DEFAULT_IMAGE_QUALITY,
+  class: className,
+  loading = "lazy",
+  vignetteRadius,
+  vignetteStrength,
+
+  // Explicitly capture inline style so we can decide where to apply it.
+  // When a vignette is active, the overlay is sized to the WRAPPER (absolute inset:0),
+  // so the wrapper must receive the sizing styles (width/height/object-fit) to match
+  // the visible pixels of the media. The inner media then fills the wrapper.
+  style: inlineStyle,
+
+  // Pass-through for all other attributes (e.g. data-*).
+  ...props
+} = Astro.props;
+
+/**
+ * Type guard to check if the `src` prop is a local `ImageMetadata` object.
+ * This is how we differentiate between optimizable local assets and remote URLs.
+ * @param s The `src` prop.
+ * @returns `true` if `src` is an `ImageMetadata` object.
+ */
+const isImageMetadata = (s: Props["src"]): s is ImageMetadata => {
+  // `ImageMetadata` objects have `width` and `height` properties.
+  return typeof s === "object" && "width" in s && "height" in s;
+};
+
+// When `src` is a local image, we can generate intelligent defaults for `widths` and `sizes`.
+// If `src` is a remote string, we fall back to a standard set of widths.
+const defaultWidths = isImageMetadata(src) ? generateOptimalWidths(src.width) : DEFAULT_RESPONSIVE_WIDTHS;
+
+// Similarly, generate a `sizes` attribute if one isn't provided.
+const defaultSizes = isImageMetadata(src) ? generateSizes(defaultWidths) : "(min-width: 1024px) 100vw, 100vw";
+
+// Use the user-provided prop if it exists, otherwise fall back to our generated default.
+const finalWidths = widths ?? defaultWidths;
+const finalSizes = sizes ?? defaultSizes;
+
+// Move rounded-* classes to a wrapper when vignette is active so the overlay clips correctly.
+const roundedClasses = extractRoundedClasses(className);
+const innerImageClasses = removeRoundedClasses(className);
+
+/**
+ * Compute wrapper vs inner styles:
+ *  - With vignette: wrapper gets the caller’s inlineStyle (so the overlay’s box matches),
+ *    and the inner media is forced to fill that box while inheriting object-fit.
+ *  - Without vignette: keep original behavior and apply inlineStyle directly to the media.
+ */
+const vignetteActive = vignetteRadius !== undefined && vignetteStrength !== undefined;
+
+const wrapperStyle = vignetteActive
+  ? [inlineStyle, "position: relative;", "overflow: hidden;"].filter(Boolean).join(" ")
+  : undefined;
+
+const innerStyle = vignetteActive ? "width: 100%; height: 100%; object-fit: inherit;" : inlineStyle;
+---
+
+{
+  /**
+   * Main render logic.
+   * We have two primary branches: one for when a vignette is applied, and one for when it's not.
+   *
+   * The vignette requires a wrapping `div` with `position: relative` and a sibling `div` for the
+   * gradient overlay. The wrapper must receive sizing styles so the overlay aligns with the
+   * visible image box (see MDN `object-fit`). The inner media then fills the wrapper box.
+   *
+   * Inside each branch, we further check if the `src` is `ImageMetadata` to decide whether
+   * to render an optimized `<Picture>` or a standard `<img>` for remote URLs.
+   */
+}
+{
+  // Branch 1: A vignette is active.
+  vignetteActive ? (
+    <div class={`${roundedClasses}`} style={wrapperStyle}>
+      {/* Render the core image element (`<Picture>` or `<img>`) */}
+      {isImageMetadata(src) ? (
+        <Picture
+          src={src}
+          alt={alt}
+          sizes={finalSizes}
+          widths={finalWidths}
+          formats={formats}
+          quality={quality}
+          loading={loading}
+          class={innerImageClasses}
+          style={innerStyle}
+          {...props}
+        />
+      ) : (
+        // For remote images, `astro:assets` cannot be used. We fall back to a
+        // standard `<img>` tag as per Astro's official guidance.
+        <img src={src as string} alt={alt} loading={loading} class={innerImageClasses} style={innerStyle} {...props} />
+      )}
+
+      {/* 
+        The vignette overlay element sized to the wrapper (absolute inset:0).
+        Because the wrapper now owns the sizing, the radial gradient conforms
+        to the same visible region as the image (no mismatch when object-fit crops).
+      */}
+      <div
+        style={`
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          /* Fallback for very old browsers that don't support radial gradients. */
+          background: transparent;
+          
+          /* Prefixed version for older Safari/Chrome. */
+          background: -webkit-radial-gradient(ellipse at center, transparent ${vignetteRadius}%, rgba(0,0,0,${vignetteStrength}) 100%);
+          
+          /* Standard CSS syntax. */
+          background: radial-gradient(ellipse at center, transparent ${vignetteRadius}%, rgba(0,0,0,${vignetteStrength}) 100%);
+        `}
+      />
+    </div>
+  ) : // Branch 2: No vignette is active.
+  isImageMetadata(src) ? (
+    // Render the `<Picture>` component directly.
+    <Picture
+      src={src}
+      alt={alt}
+      sizes={finalSizes}
+      widths={finalWidths}
+      formats={formats}
+      quality={quality}
+      loading={loading}
+      class={className}
+      style={innerStyle}
+      {...props}
+    />
+  ) : (
+    // Render the standard `<img>` tag directly for remote images.
+    <img src={src as string} alt={alt} loading={loading} class={className} style={innerStyle} {...props} />
+  )
+}
