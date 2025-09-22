@@ -26,18 +26,17 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Install deps
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build all packages
         run: pnpm -r run build
 
-      - name: Run unit tests
+      - name: Run unit/SSR tests (Vitest)
         run: pnpm test
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
-        working-directory: .
 
-      - name: Run e2e tests (Playwright)
+      - name: Run E2E tests (Playwright)
         run: pnpm test:e2e

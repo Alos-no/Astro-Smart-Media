@@ -28,19 +28,30 @@ import hero from "../assets/poster.jpg"; // reuse existing asset
       <section data-tab-panel="local">
         <DemoBlock
           title="Local import → optimized <picture>"
-          description="Astro generates AVIF+WebP (by default) in multiple widths. Try resizing the window."
+          description="Astro generates AVIF+WebP (by default) in multiple widths. Resize the window to see candidate changes (only works in increasing order)."
         >
-          <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 0.75rem;">
+          <div class="demo-grid">
             <div id="img-local-1" style="width: 100%; border: 1px solid #22252a; padding: 0.5rem;">
-              <SmartImageDemo src={hero} alt="Local optimized example" class="rounded-lg" loading="eager" />
+              <SmartImageDemo
+                src={hero}
+                alt="Local optimized example"
+                class="rounded-lg"
+                widths={[320, 480, 640, 750, 828, 960, 1080, 1280, 1536, 1920]}
+                sizes="100vw"
+                loading="eager"
+                style="width: 100%; height: auto;"
+              />
             </div>
 
             <InspectorTable id="img-local-1-inspector" title="Local optimized — Live inspector" />
           </div>
         </DemoBlock>
 
-        <DemoBlock title="Custom widths + sizes" description="Override widths and provide an explicit sizes attribute.">
-          <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 0.75rem;">
+        <DemoBlock
+          title="Custom widths + sizes"
+          description="Override widths and provide an explicit sizes attribute. Note: above 960px on 1× displays this example clamps the slot to 960px, so the chosen candidate may appear constant by design."
+        >
+          <div class="demo-grid">
             <div id="img-local-2" style="width: 100%; border: 1px solid #22252a; padding: 0.5rem;">
               <SmartImageDemo
                 src={hero}
@@ -48,6 +59,7 @@ import hero from "../assets/poster.jpg"; // reuse existing asset
                 class="rounded-lg"
                 widths={[640, 960, 1280]}
                 sizes="(max-width: 960px) 90vw, 960px"
+                style="width: 100%; height: auto;"
               />
             </div>
 
@@ -62,13 +74,14 @@ import hero from "../assets/poster.jpg"; // reuse existing asset
           title="Remote URL → plain <img>"
           description="When src is a string URL, Astro bypasses optimization and renders <img> directly."
         >
-          <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 0.75rem;">
+          <div class="demo-grid">
             <div id="img-remote-1" style="width: 100%; border: 1px solid #22252a; padding: 0.5rem;">
               <SmartImageDemo
                 src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1920"
                 alt="Remote image example"
                 class="rounded-lg"
                 loading="lazy"
+                style="width: 100%; height: auto;"
               />
             </div>
 
@@ -80,7 +93,7 @@ import hero from "../assets/poster.jpg"; // reuse existing asset
       <!-- Panel: Vignette -->
       <section data-tab-panel="vignette">
         <DemoBlock title="Vignette — soft edge" description="radius=70, strength=0.4">
-          <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 0.75rem;">
+          <div class="demo-grid">
             <div id="img-vignette-1" style="width: 100%; border: 1px solid #22252a; padding: 0.5rem;">
               <SmartImageDemo
                 src={hero}
@@ -97,7 +110,7 @@ import hero from "../assets/poster.jpg"; // reuse existing asset
         </DemoBlock>
 
         <DemoBlock title="Vignette — stronger" description="radius=55, strength=0.65">
-          <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 0.75rem;">
+          <div class="demo-grid">
             <div id="img-vignette-2" style="width: 100%; border: 1px solid #22252a; padding: 0.5rem;">
               <SmartImageDemo
                 src={hero}
@@ -117,93 +130,8 @@ import hero from "../assets/poster.jpg"; // reuse existing asset
   </Tabs>
 </DemoLayout>
 
-<script>
-  // ---------- Shared helpers for SmartImage inspectors ----------
-
-  /**
-   * Resolve the <img> we should observe:
-   *  - If a <picture> exists, use its inner <img> fallback (carries srcset/sizes and exposes currentSrc/natural*).
-   *  - Otherwise, use the plain <img>.
-   */
-  function findTargetImg(root) {
-    const pic = root.querySelector("picture");
-    if (pic) {
-      const inner = pic.querySelector("img");
-      if (inner) return inner;
-    }
-    return root.querySelector("img");
-  }
-
-  /**
-   * Push rows into an InspectorTable by dispatching a CustomEvent.
-   * See MDN CustomEvent() and DOM Events docs. 
-   * https://developer.mozilla.org/en-US/docs/Web/API/CustomEvent/CustomEvent
-   * https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model/Events
-   */
-  function updateInspector(tableId, rows) {
-    const tgt = document.getElementById(tableId);
-    if (!tgt) return;
-    tgt.dispatchEvent(new CustomEvent("inspector:update", { detail: { rows } }));
-  }
-
-  /**
-   * Initialize a live inspector for an image wrapper.
-   * We read:
-   *  - wrapper client box (CSS px)
-   *  - devicePixelRatio
-   *  - HTMLImageElement.currentSrc, naturalWidth/naturalHeight
-   *  - sizes and candidate count from srcset
-   *
-   * References:
-   *  - HTMLImageElement.currentSrc/naturalWidth/naturalHeight (MDN)
-   *  - sizes/srcset behavior (MDN)
-   *  - dPR (MDN)
-   *  - ResizeObserver to react to size changes (MDN)
-   */
-  function initImageInspector(wrapperId, tableId) {
-    const wrapper = document.getElementById(wrapperId);
-    if (!wrapper) return;
-
-    const img = findTargetImg(wrapper);
-    if (!img) return;
-
-    const ro = new ResizeObserver(() => schedule());
-    ro.observe(wrapper);
-
-    const mo = new MutationObserver(() => schedule());
-    mo.observe(img, { attributes: true, attributeFilter: ["src", "srcset", "sizes"] });
-
-    img.addEventListener("load", () => schedule());
-    window.addEventListener("resize", () => schedule());
-
-    let scheduled = false;
-    const schedule = () => {
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(() => {
-        scheduled = false;
-
-        const rows = [
-          { label: "Container (CSS px)", value: `${wrapper.clientWidth}×${wrapper.clientHeight}` },
-          { label: "devicePixelRatio", value: String(window.devicePixelRatio ?? 1) },
-          { label: "currentSrc", value: img.currentSrc || "(empty)" },
-          { label: "natural (CSS px)", value: `${img.naturalWidth}×${img.naturalHeight}` },
-          { label: "sizes", value: img.getAttribute("sizes") || "(none)" },
-          {
-            label: "srcset candidates",
-            value: (img.getAttribute("srcset") || "")
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean).length,
-          },
-        ];
-
-        updateInspector(tableId, rows);
-      });
-    };
-
-    schedule();
-  }
+<script type="module">
+  import { initImageInspector } from "/src/utils/inspectors.js";
 
   // Wire up all inspectors on this page.
   initImageInspector("img-local-1", "img-local-1-inspector");

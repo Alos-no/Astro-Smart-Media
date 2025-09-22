@@ -38,6 +38,12 @@ importers:
       astro:
         specifier: ^5.13.5
         version: 5.13.9(@types/node@24.5.2)(rollup@4.52.0)(typescript@5.9.2)
+      hls.js:
+        specifier: ^1.6.12
+        version: 1.6.12
+      sharp:
+        specifier: ^0.34.4
+        version: 0.34.4
 
   packages/astro-media:
     dependencies:
@@ -2370,8 +2376,7 @@ snapshots:
   '@esbuild/win32-x64@0.25.10':
     optional: true
 
-  '@img/colour@1.0.0':
-    optional: true
+  '@img/colour@1.0.0': {}
 
   '@img/sharp-darwin-arm64@0.34.4':
     optionalDependencies:
@@ -2952,8 +2957,7 @@ snapshots:
 
   detect-indent@6.1.0: {}
 
-  detect-libc@2.1.0:
-    optional: true
+  detect-libc@2.1.0: {}
 
   deterministic-object-hash@2.0.2:
     dependencies:
@@ -3967,7 +3971,6 @@ snapshots:
       '@img/sharp-win32-arm64': 0.34.4
       '@img/sharp-win32-ia32': 0.34.4
       '@img/sharp-win32-x64': 0.34.4
-    optional: true
 
   shebang-command@2.0.0:
     dependencies:

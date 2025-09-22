@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@alos-no/astro-media": "workspace:*",
-    "astro": "^5.13.5"
+    "astro": "^5.13.5",
+    "sharp": "^0.34.4",
+    "hls.js": "^1.6.12"
   }
 }

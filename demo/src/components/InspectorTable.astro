@@ -46,6 +46,7 @@ const { id, title = "Live inspector" } = Astro.props;
     width: 100%;
     border-collapse: collapse;
     font-size: 0.9rem;
+    table-layout: fixed; /* Prevent longest tokens from expanding table beyond container */
   }
 
   .inspector th,
@@ -66,7 +67,9 @@ const { id, title = "Live inspector" } = Astro.props;
   .inspector td {
     color: #d7dce4;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    word-break: break-all;
+    overflow-wrap: anywhere; /* Preferred modern wrapping for long URLs/strings */
+    word-break: break-word; /* Practical fallback; equivalent to overflow-wrap:anywhere in effect */
+    white-space: normal; /* Ensure wrapping is allowed in cells */
   }
 </style>
 
@@ -82,15 +85,24 @@ const { id, title = "Live inspector" } = Astro.props;
 
 <script>
   // Minimal controller: this element updates whenever "inspector:update" is dispatched on it.
+  // IMPORTANT: We DO NOT use `define:vars` here. Astro only processes <script> blocks
+  // that have no attributes (except a plain `src`). Processed scripts get TS transforms
+  // and play nicely with Vite’s dependency scanner.
   (() => {
-    const root = document.getElementById({ id: id });
+    /**
+     * Resolve the root <section data-inspector> associated with this script by
+     * walking DOM adjacency. The <script> is placed immediately after the section,
+     * so the previousElementSibling is our root.
+     */
+    const prev = document.currentScript?.previousElementSibling;
+    const root = prev instanceof HTMLElement && prev.matches("[data-inspector]") ? (prev as HTMLElement) : null;
 
     if (!root) {
       return;
     }
 
     /** Render helper: replace tbody rows from an array of {label, value} */
-    const render = (rows) => {
+    const render = (rows: Array<{ label: string; value: unknown }>): void => {
       const tbody = root.querySelector("tbody");
       if (!tbody) return;
 
@@ -111,10 +123,13 @@ const { id, title = "Live inspector" } = Astro.props;
       });
     };
 
-    root.addEventListener("inspector:update", (e) => {
-      const rows = e?.detail?.rows ?? [];
+    // Update on custom events dispatched to the root element.
+    root.addEventListener("inspector:update", (e: Event) => {
+      const anyEvent = e as CustomEvent<{ rows?: unknown }>;
+      const rows = anyEvent?.detail?.rows ?? [];
+
       if (Array.isArray(rows)) {
-        render(rows);
+        render(rows as Array<{ label: string; value: unknown }>);
       }
     });
   })();

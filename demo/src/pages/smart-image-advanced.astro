@@ -44,6 +44,7 @@ import hero from "../assets/poster.jpg";
             formats={["avif", "webp", "jpg"]}
             quality={60}
             loading="eager"
+            style="width: 100%; height: auto;"
           />
         </DemoBlock>
 
@@ -55,6 +56,7 @@ import hero from "../assets/poster.jpg";
             formats={["avif", "webp", "jpg"]}
             quality={90}
             loading="lazy"
+            style="width: 100%; height: auto;"
           />
         </DemoBlock>
       </section>
@@ -65,7 +67,7 @@ import hero from "../assets/poster.jpg";
           title="Generated widths (default)"
           description="When omitted, widths are generated from the source dimensions and a default list."
         >
-          <SmartImageDemo src={hero} alt="Generated widths" class="rounded-lg" />
+          <SmartImageDemo src={hero} alt="Generated widths" class="rounded-lg" style="width: 100%; height: auto;" />
         </DemoBlock>
 
         <DemoBlock
@@ -78,6 +80,7 @@ import hero from "../assets/poster.jpg";
             class="rounded-lg"
             widths={[640, 960, 1280]}
             sizes="(max-width: 960px) 90vw, 960px"
+            style="width: 100%; height: auto;"
           />
         </DemoBlock>
       </section>
@@ -94,6 +97,7 @@ import hero from "../assets/poster.jpg";
             class="rounded-xl shadow"
             vignetteRadius={60}
             vignetteStrength={0.5}
+            style="object-fit: cover; width: 100%; height: auto;"
           />
         </DemoBlock>
       </section>
@@ -110,6 +114,7 @@ import hero from "../assets/poster.jpg";
             class="rounded-lg"
             loading="lazy"
             sizes="(max-width: 900px) 92vw, 900px"
+            style="width: 100%; height: auto;"
           />
         </DemoBlock>
       </section>
