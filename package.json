@@ -1,0 +1,33 @@
+{
+  "name": "alos-astro-media-monorepo",
+  "private": true,
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r run build",
+    "dev": "pnpm --filter demo dev",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "lint": "eslint . --ext .ts,.tsx,.astro",
+    "format": "prettier --write .",
+    "ci:test": "pnpm test && pnpm test:e2e",
+    "release:changeset": "changeset",
+    "release:version": "changeset version",
+    "release:publish": "changeset publish",
+    "release:dry": "pnpm publish -r --dry-run --access public --no-git-checks",
+    "ci:publish": "pnpm publish -r --access public --provenance",
+    "demo": "pnpm --filter demo dev -- --open",
+    "demo:preview": "pnpm --filter demo build && pnpm --filter demo preview -- --open"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.7",
+    "@playwright/test": "^1.55.0",
+    "astro": "^5.13.5",
+    "prettier": "^3.6.2",
+    "prettier-plugin-astro": "^0.14.1",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "demo",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "demo:open": "astro dev --open"
+  },
+  "dependencies": {
+    "@alos-no/astro-media": "workspace:*",
+    "astro": "^5.13.5",
+    "sharp": "^0.34.4",
+    "hls.js": "^1.6.12"
+  }
+}

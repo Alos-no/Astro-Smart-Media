@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# prevent concurrent publishes per ref
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  release:
+    name: Create Release PR or Publish
+    runs-on: ubuntu-latest
+
+    # Gate the job behind an Environment
+    environment:
+      name: main
+      url: https://www.npmjs.com/package/@alos-no/astro-media
+
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write # for npm provenance if we enable it later
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node (npm registry auth)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          # Intentionally omit registry-url so setup-node does NOT create .npmrc.
+          # Changesets Action will create .npmrc that uses ${NPM_TOKEN}.
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create Release PR or Publish to npm
+        uses: changesets/action@v1
+        with:
+          # If there are unpublished changesets: open/update a Release PR.
+          # If the commit is a release commit on main: run this publish command.
+          publish: pnpm ci:publish
+        env:
+          # Required by the action to create .npmrc and to auth for publish
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

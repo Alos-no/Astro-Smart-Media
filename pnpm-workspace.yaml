@@ -1,0 +1,5 @@
+packages:
+  # The demo/sample site
+  - "demo"
+  # The component library package
+  - "packages/*"

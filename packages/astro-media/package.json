@@ -1,0 +1,55 @@
+{
+  "name": "@alos-no/astro-media",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Reusable Astro media components: optimized images, and background video with HLS fallback.",
+  "homepage": "https://github.com/alos-no/astro-media#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alos-no/astro-media.git"
+  },
+  "license": "GPL-3.0-only",
+  "engines": {
+    "node": ">=20.3.0 <21 || >=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "src/**/*",
+    "README.md"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./SmartVideo.astro": "./src/components/SmartVideo.astro",
+    "./SmartImage.astro": "./src/components/SmartImage.astro"
+  },
+  "keywords": [
+    "astro-component",
+    "withastro",
+    "media",
+    "image",
+    "images",
+    "video",
+    "performance",
+    "seo"
+  ],
+  "peerDependencies": {
+    "astro": "^5.0.0"
+  },
+  "dependencies": {
+    "hls.js": "^1.6.11"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  },
+  "types": "./index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "publish:dry": "npm publish --access public --dry-run"
+  }
+}

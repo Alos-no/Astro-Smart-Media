@@ -1,0 +1,123 @@
+---
+/**
+ * SmartImage — Advanced Demos
+ * This page isolates image pipeline controls:
+ *  - explicit formats + quality
+ *  - custom widths + sizes vs generated defaults
+ *  - rounded + vignette correctness
+ *  - remote URL usage with explicit sizes (no optimization)
+ */
+import DemoLayout from "../layouts/DemoLayout.astro";
+import Tabs from "../components/Tabs.astro";
+import DemoBlock from "../components/DemoBlock.astro";
+
+import { SmartImage as SmartImageDemo } from "@alos-no/astro-media";
+import hero from "../assets/poster.jpg";
+---
+
+<DemoLayout title="Astro Media — SmartImage Advanced">
+  <div class="callout">
+    <strong>SmartImage Advanced</strong> focuses on responsive images with explicit controls and rendering edge cases. Resize
+    the viewport to observe <code>sizes</code> decisions.
+  </div>
+
+  <Tabs
+    tabs={[
+      { id: "formats", label: "Formats & quality" },
+      { id: "widths", label: "Widths & sizes" },
+      { id: "rounded", label: "Rounded + vignette" },
+      { id: "remote-sizes", label: "Remote + sizes" },
+    ]}
+    initialId="formats"
+  >
+    <Fragment slot="panels">
+      <!-- Panel: Formats & quality -->
+      <section data-tab-panel="formats">
+        <DemoBlock
+          title="AVIF → WebP → JPG (q=60)"
+          description="Lower quality for size; include a legacy JPG fallback in addition to AVIF/WebP."
+        >
+          <SmartImageDemo
+            src={hero}
+            alt="Formats AVIF→WebP→JPG at q=60"
+            class="rounded-lg"
+            formats={["avif", "webp", "jpg"]}
+            quality={60}
+            loading="eager"
+            style="width: 100%; height: auto;"
+          />
+        </DemoBlock>
+
+        <DemoBlock title="Higher quality (q=90)" description="Compare visual fidelity at a higher quality setting.">
+          <SmartImageDemo
+            src={hero}
+            alt="Formats at q=90"
+            class="rounded-lg"
+            formats={["avif", "webp", "jpg"]}
+            quality={90}
+            loading="lazy"
+            style="width: 100%; height: auto;"
+          />
+        </DemoBlock>
+      </section>
+
+      <!-- Panel: Widths & sizes -->
+      <section data-tab-panel="widths">
+        <DemoBlock
+          title="Generated widths (default)"
+          description="When omitted, widths are generated from the source dimensions and a default list."
+        >
+          <SmartImageDemo src={hero} alt="Generated widths" class="rounded-lg" style="width: 100%; height: auto;" />
+        </DemoBlock>
+
+        <DemoBlock
+          title="Custom widths + explicit sizes"
+          description='Widths=[640, 960, 1280] and sizes="(max-width: 960px) 90vw, 960px".'
+        >
+          <SmartImageDemo
+            src={hero}
+            alt="Custom widths and sizes"
+            class="rounded-lg"
+            widths={[640, 960, 1280]}
+            sizes="(max-width: 960px) 90vw, 960px"
+            style="width: 100%; height: auto;"
+          />
+        </DemoBlock>
+      </section>
+
+      <!-- Panel: Rounded + vignette -->
+      <section data-tab-panel="rounded">
+        <DemoBlock
+          title="Rounded + vignette — clipping correctness"
+          description="Rounded classes move to a wrapper so the gradient overlay clips properly."
+        >
+          <SmartImageDemo
+            src={hero}
+            alt="Rounded + vignette"
+            class="rounded-xl shadow"
+            vignetteRadius={60}
+            vignetteStrength={0.5}
+            style="object-fit: cover; width: 100%; height: auto;"
+          />
+        </DemoBlock>
+      </section>
+
+      <!-- Panel: Remote + sizes -->
+      <section data-tab-panel="remote-sizes">
+        <DemoBlock
+          title="Remote URL — plain <img> with sizes"
+          description="Remote images are not optimized; you can still supply a useful sizes attribute."
+        >
+          <SmartImageDemo
+            src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1920"
+            alt="Remote image"
+            class="rounded-lg"
+            loading="lazy"
+            sizes="(max-width: 900px) 92vw, 900px"
+            style="width: 100%; height: auto;"
+          />
+        </DemoBlock>
+      </section>
+    </Fragment>
+  </Tabs>
+</DemoLayout>

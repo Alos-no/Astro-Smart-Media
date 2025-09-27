@@ -1,0 +1,202 @@
+---
+/**
+ * <Tabs />
+ * Accessible, framework-agnostic tabs with ARIA roles and minimal JS.
+ *
+ * Usage:
+ * <Tabs tabs={[{ id: 'a', label: 'A'}, { id:'b', label:'B'}]} initialId="a">
+ *   <Fragment slot="panels">
+ *     <section data-tab-panel="a">Panel A</section>
+ *     <section data-tab-panel="b">Panel B</section>
+ *   </Fragment>
+ * </Tabs>
+ */
+
+export interface TabDef {
+  id: string;
+  label: string;
+}
+
+export interface Props {
+  tabs: TabDef[];
+  initialId?: string;
+  id?: string;
+}
+
+const { tabs, initialId = tabs[0]?.id, id = crypto.randomUUID() } = Astro.props;
+---
+
+<style>
+  .tabs {
+    margin: 1rem 0 1.5rem;
+  }
+  .tablist {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+    border-bottom: 1px solid #22252a;
+    padding-bottom: 0.25rem;
+  }
+  .tab {
+    padding: 0.45rem 0.75rem;
+    border: 1px solid #22252a;
+    border-bottom: none;
+    border-top-left-radius: 0.5rem;
+    border-top-right-radius: 0.5rem;
+    background: #15171a;
+    color: #cfd6df;
+    font-size: 0.95rem;
+  }
+  .tab[aria-selected="true"] {
+    background: #0f1114;
+    color: #fff;
+    border-color: #2b3138;
+  }
+  .panels {
+    margin-top: 1rem;
+  }
+  [hidden] {
+    display: none !important;
+  }
+</style>
+
+<div class="tabs" id={`tabs-${id}`}>
+  <div class="tablist" role="tablist" aria-label="Demo tabs">
+    {
+      tabs.map((t, idx) => (
+        <button
+          class="tab"
+          role="tab"
+          aria-selected={t.id === initialId ? "true" : "false"}
+          aria-controls={`panel-${id}-${t.id}`}
+          id={`tab-${id}-${t.id}`}
+          tabindex={t.id === initialId ? "0" : "-1"}
+          data-tab-id={t.id}
+        >
+          {t.label}
+        </button>
+      ))
+    }
+  </div>
+
+  <div class="panels">
+    <slot name="panels" />
+  </div>
+</div>
+
+<script>
+  // Minimal, well-commented controller for tabs.
+  (() => {
+    /**
+     * Find the root tabs container by climbing from this <script>, with a class fallback.
+     * Use concrete HTML element types so TS knows properties like .dataset/.hidden/.tabIndex/.focus exist.
+     */
+    const root = document.currentScript?.previousElementSibling?.previousElementSibling?.previousElementSibling;
+
+    const container: HTMLDivElement | null =
+      root instanceof HTMLElement && root.classList.contains("tabs")
+        ? (root as HTMLDivElement)
+        : document.querySelector<HTMLDivElement>(".tabs:last-of-type");
+
+    if (!container) {
+      return;
+    }
+
+    /** Tablist element (container for the tabs) */
+    const tablist = container.querySelector<HTMLDivElement>('[role="tablist"]');
+    if (!tablist) {
+      // Nothing to wire if no tablist is present.
+      return;
+    }
+
+    /** All tab buttons, typed precisely for .tabIndex/.focus access */
+    const tabs = container.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+
+    /** All tab panels, typed as HTMLElements for .hidden */
+    const panels = container.querySelectorAll<HTMLElement>("[data-tab-panel]");
+
+    /**
+     * Initialize and resync the panels: only the selected tab's panel is visible.
+     * We rely on data attributes and ARIA wiring recommended by APG.
+     */
+    const syncPanels = (): void => {
+      const selected = container.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]');
+      const selectedId = selected?.dataset?.tabId ?? null;
+
+      panels.forEach((panel) => {
+        const id = panel.getAttribute("data-tab-panel");
+        if (!id) {
+          return;
+        }
+
+        panel.id = `panel-${container.id}-${id}`;
+        panel.setAttribute("role", "tabpanel");
+        panel.setAttribute("aria-labelledby", `tab-${container.id}-${id}`);
+        panel.hidden = id !== selectedId;
+      });
+    };
+
+    /**
+     * Update ARIA state + roving tabindex, then sync panels.
+     * @param btn The tab button that becomes selected.
+     */
+    const select = (btn: HTMLButtonElement): void => {
+      tabs.forEach((el) => {
+        const isSel = el === btn;
+
+        el.setAttribute("aria-selected", isSel ? "true" : "false");
+        // Roving tabindex per accessible tabs guidance: only the active tab has tabIndex=0.
+        el.tabIndex = isSel ? 0 : -1;
+      });
+
+      syncPanels();
+    };
+
+    /** Click handling: walk up to the closest role="tab" button and select it. */
+    tablist.addEventListener("click", (e: MouseEvent) => {
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      const btn = target ? target.closest<HTMLButtonElement>('[role="tab"]') : null;
+
+      if (!btn) {
+        return;
+      }
+
+      select(btn);
+    });
+
+    /**
+     * Basic keyboard support:
+     * ArrowRight/ArrowLeft to navigate, Home/End to jump to first/last.
+     * Using KeyboardEvent gives us a typed .key.
+     */
+    tablist.addEventListener("keydown", (e: KeyboardEvent) => {
+      const list = Array.from(tabs);
+      const idx = list.findIndex((t) => t.getAttribute("aria-selected") === "true");
+
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        const next = list[(idx + 1) % list.length];
+        next.focus();
+        select(next);
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        const prev = list[(idx - 1 + list.length) % list.length];
+        prev.focus();
+        select(prev);
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        const first = list[0];
+        first.focus();
+        select(first);
+      } else if (e.key === "End") {
+        e.preventDefault();
+        const last = list[list.length - 1];
+        last.focus();
+        select(last);
+      }
+    });
+
+    // Initial sync on load.
+    syncPanels();
+  })();
+</script>

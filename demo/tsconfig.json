@@ -1,0 +1,16 @@
+{
+  "extends": "astro/tsconfigs/strict",
+
+  "compilerOptions": {
+    // Teach the TS server to resolve packages the same way Vite/Astro do.
+    // This understands package.json "exports" and doesn’t require file extensions.
+    "moduleResolution": "bundler",
+
+    // Ensure Astro types and client utilities are in scope for the editor.
+    "types": ["astro/client"]
+  },
+
+  // Official Astro guidance for type coverage without checking build output.
+  "include": [".astro/types.d.ts", "**/*"],
+  "exclude": ["dist"]
+}

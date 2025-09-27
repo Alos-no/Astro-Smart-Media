@@ -1,0 +1,39 @@
+---
+/**
+ * DemoBlock
+ * Simple wrapper with a title and optional description.
+ */
+export interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<style>
+  .block {
+    border: 1px solid #22252a;
+    border-radius: 0.75rem;
+    background: #0f1114;
+    padding: 1rem;
+    margin: 1rem 0 1.25rem;
+  }
+  .block h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1.05rem;
+  }
+  .block p {
+    margin: 0 0 0.75rem;
+    color: #b2b9c4;
+    line-height: 1.5;
+  }
+</style>
+
+<section class="block">
+  <h3>{title}</h3>
+  {description && <p>{description}</p>}
+  <div>
+    <slot />
+  </div>
+</section>

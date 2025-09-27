@@ -1,0 +1,136 @@
+---
+/**
+ * InspectorTable
+ * Lightweight inspector panel that displays key-value rows and updates
+ * live when a CustomEvent('inspector:update', { detail: { rows } }) is dispatched
+ * on the root element.
+ *
+ * Props:
+ * - id: string (required) — DOM id used both for the wrapper and as the event target
+ * - title?: string — Optional heading shown above the table
+ *
+ * Usage from a page:
+ *   <InspectorTable id="img-local-1-inspector" title="Live inspector" />
+ *   <script>
+ *     const root = document.getElementById('img-local-1-inspector');
+ *     root?.dispatchEvent(new CustomEvent('inspector:update', {
+ *       detail: { rows: [{ label: 'currentSrc', value: '...' }, ...] }
+ *     }));
+ *   </script>
+ */
+
+export interface Props {
+  id: string;
+  title?: string;
+}
+
+const { id, title = "Live inspector" } = Astro.props;
+---
+
+<style>
+  .inspector {
+    border: 1px solid #22252a;
+    border-radius: 0.5rem;
+    background: #0f1114;
+  }
+
+  .inspector h4 {
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.95rem;
+    border-bottom: 1px solid #22252a;
+    color: #e7ecf3;
+  }
+
+  .inspector table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    table-layout: fixed; /* Prevent longest tokens from expanding table beyond container */
+  }
+
+  .inspector th,
+  .inspector td {
+    border-top: 1px solid #1b1e23;
+    padding: 0.45rem 0.6rem;
+    vertical-align: top;
+  }
+
+  .inspector th {
+    width: 40%;
+    color: #aab2bd;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .inspector td {
+    color: #d7dce4;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    overflow-wrap: anywhere; /* Preferred modern wrapping for long URLs/strings */
+    word-break: break-word; /* Practical fallback; equivalent to overflow-wrap:anywhere in effect */
+    white-space: normal; /* Ensure wrapping is allowed in cells */
+  }
+</style>
+
+<section class="inspector" id={id} data-inspector>
+  <h4>{title}</h4>
+  <table aria-live="polite" aria-atomic="true">
+    <thead>
+      <tr><th>Metric</th><th>Value</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<script>
+  // Minimal controller: this element updates whenever "inspector:update" is dispatched on it.
+  // IMPORTANT: We DO NOT use `define:vars` here. Astro only processes <script> blocks
+  // that have no attributes (except a plain `src`). Processed scripts get TS transforms
+  // and play nicely with Vite’s dependency scanner.
+  (() => {
+    /**
+     * Resolve the root <section data-inspector> associated with this script by
+     * walking DOM adjacency. The <script> is placed immediately after the section,
+     * so the previousElementSibling is our root.
+     */
+    const prev = document.currentScript?.previousElementSibling;
+    const root = prev instanceof HTMLElement && prev.matches("[data-inspector]") ? (prev as HTMLElement) : null;
+
+    if (!root) {
+      return;
+    }
+
+    /** Render helper: replace tbody rows from an array of {label, value} */
+    const render = (rows: Array<{ label: string; value: unknown }>): void => {
+      const tbody = root.querySelector("tbody");
+      if (!tbody) return;
+
+      // Build rows with safe textContent assignments.
+      tbody.innerHTML = "";
+      rows.forEach((row) => {
+        const tr = document.createElement("tr");
+
+        const th = document.createElement("th");
+        th.textContent = String(row?.label ?? "");
+        tr.appendChild(th);
+
+        const td = document.createElement("td");
+        td.textContent = typeof row?.value === "string" ? row.value : JSON.stringify(row?.value);
+        tr.appendChild(td);
+
+        tbody.appendChild(tr);
+      });
+    };
+
+    // Update on custom events dispatched to the root element.
+    root.addEventListener("inspector:update", (e: Event) => {
+      const anyEvent = e as CustomEvent<{ rows?: unknown }>;
+      const rows = anyEvent?.detail?.rows ?? [];
+
+      if (Array.isArray(rows)) {
+        render(rows as Array<{ label: string; value: unknown }>);
+      }
+    });
+  })();
+</script>

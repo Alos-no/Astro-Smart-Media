@@ -1,0 +1,84 @@
+---
+import SmartVideo from "@alos-no/astro-media/SmartVideo.astro";
+import posterImage from "../assets/poster.jpg";
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SmartVideo Test Page</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        margin: 0;
+        padding: 5rem;
+        background: #111;
+        color: white;
+      }
+
+      .spacer {
+        height: 150vh;
+        border: 2px dashed #444;
+        display: grid;
+        place-content: center;
+        text-align: center;
+      }
+
+      /* Deterministic size so IntersectionObserver threshold is reached */
+      .video-container {
+        width: 100%;
+        max-width: 800px;
+        margin: 0 auto;
+        border: 1px solid #555;
+        aspect-ratio: 16 / 9; /* Native CSS aspect ratio */
+      }
+    </style>
+  </head>
+  <body>
+    <div class="spacer">
+      <h1>Scroll Down</h1>
+      <p>Autoplay video is below the fold. Hover video comes later.</p>
+    </div>
+
+    <!-- Single AUTOPLAY section expected by the tests -->
+    <div id="autoplay-video-wrapper" class="video-container">
+      <!-- Start unmuted so Chromium/Firefox reliably block the first play() and trigger our "muted retry" log -->
+      <SmartVideo
+        hlsSrc="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
+        src="/videos/fallback"
+        poster={posterImage}
+        class=""
+        muted={false}
+      />
+    </div>
+
+    <div class="spacer">
+      <p>Keep scrolling for the hover-to-play sample.</p>
+    </div>
+
+    <!-- Single HOVER section expected by the tests -->
+    <div id="hover-video-wrapper" class="video-container">
+      <SmartVideo
+        hlsSrc="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
+        src="/videos/fallback"
+        poster={posterImage}
+        class=""
+        playOnHover={true}
+        muted={true}
+      />
+    </div>
+
+    <div class="spacer">
+      <p>End of page.</p>
+    </div>
+
+    <!-- A sample with native controls enabled -->
+    <div id="controls-video-wrapper" class="video-container">
+      <SmartVideo src="/videos/fallback" poster={posterImage} class="" controls={true} muted={true} autoplay={false} />
+    </div>
+
+    <div class="spacer">
+      <p>End of page 2.</p>
+    </div>
+  </body>
+</html>

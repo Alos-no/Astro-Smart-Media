@@ -1,0 +1,194 @@
+---
+/**
+ * SmartVideo — Advanced Demos
+ * This page isolates behaviors that are trickier to validate:
+ *  - sizeStrategy="fill" vs "none" (framework-agnostic sizing)
+ *  - preload strategies: none/metadata/auto
+ *  - SEO JSON-LD metadata injection
+ *  - Poster tuning via SmartImage props
+ */
+import DemoLayout from "../layouts/DemoLayout.astro";
+import Tabs from "../components/Tabs.astro";
+import DemoBlock from "../components/DemoBlock.astro";
+
+import { SmartVideo as SmartVideoDemo } from "@alos-no/astro-media";
+import posterImage from "../assets/poster.jpg";
+
+// Public test HLS (Mux).
+const HLS = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
+---
+
+<DemoLayout title="Astro Media — SmartVideo Advanced">
+  <div class="callout">
+    <strong>SmartVideo Advanced</strong> drills into sizing and loading behaviors, plus metadata and poster tuning. Resize
+    the window and observe each box scale.
+  </div>
+
+  <Tabs
+    tabs={[
+      { id: "sizing", label: "Sizing strategies" },
+      { id: "preload", label: "Preload modes" },
+      { id: "metadata", label: "SEO metadata" },
+      { id: "poster", label: "Poster tuning" },
+    ]}
+    initialId="sizing"
+  >
+    <Fragment slot="panels">
+      <!-- Panel: Sizing strategies -->
+      <section data-tab-panel="sizing">
+        <DemoBlock
+          title='sizeStrategy="fill" (fills parent)'
+          description="Inline width/height are applied on the root element; child video covers with object-fit."
+        >
+          <!-- Parent sets the available box; SmartVideo fills it. No fixed max-width. -->
+          <div style="width: 100%; margin: 0 auto; height: 360px; border: 1px solid #22252a;">
+            <SmartVideoDemo
+              hlsSrc={HLS}
+              src="/videos/fallback"
+              poster={posterImage}
+              sizeStrategy="fill"
+              autoplay={true}
+              muted={true}
+              loop={true}
+              class=""
+            />
+          </div>
+        </DemoBlock>
+
+        <DemoBlock
+          title='sizeStrategy="none" (CSS-controlled)'
+          description="No inline size is set; you must specify explicit dimensions on the container."
+        >
+          <!-- Parent provides the size; SmartVideo does not set inline width/height. -->
+          <div style="width: 100%; margin: 0 auto; height: 280px; border: 1px solid #22252a;">
+            <SmartVideoDemo
+              hlsSrc={HLS}
+              src="/videos/fallback"
+              poster={posterImage}
+              sizeStrategy="none"
+              autoplay={true}
+              muted={true}
+              loop={true}
+              class=""
+            />
+          </div>
+        </DemoBlock>
+      </section>
+
+      <!-- Panel: Preload strategies -->
+      <section data-tab-panel="preload">
+        <DemoBlock
+          title="Preload comparison"
+          description="Observe network behavior differences across preload='none' | 'metadata' | 'auto'."
+        >
+          <div
+            style="
+              display: grid;
+              grid-template-columns: repeat(3, minmax(0, 1fr));
+              gap: 0.75rem;
+            "
+          >
+            <div style="aspect-ratio: 16 / 9; border: 1px solid #22252a;">
+              <SmartVideoDemo
+                hlsSrc={HLS}
+                src="/videos/fallback"
+                poster={posterImage}
+                preload="none"
+                muted={true}
+                loop={true}
+                class=""
+              />
+              <small style="display:block; padding:0.5rem; color:#9aa3af;">preload="none"</small>
+            </div>
+
+            <div style="aspect-ratio: 16 / 9; border: 1px solid #22252a;">
+              <SmartVideoDemo
+                hlsSrc={HLS}
+                src="/videos/fallback"
+                poster={posterImage}
+                preload="metadata"
+                muted={true}
+                loop={true}
+                class=""
+              />
+              <small style="display:block; padding:0.5rem; color:#9aa3af;">preload="metadata" (default)</small>
+            </div>
+
+            <div style="aspect-ratio: 16 / 9; border: 1px solid #22252a;">
+              <SmartVideoDemo
+                hlsSrc={HLS}
+                src="/videos/fallback"
+                poster={posterImage}
+                preload="auto"
+                muted={true}
+                loop={true}
+                class=""
+              />
+              <small style="display:block; padding:0.5rem; color:#9aa3af;">preload="auto"</small>
+            </div>
+          </div>
+        </DemoBlock>
+      </section>
+
+      <!-- Panel: SEO metadata -->
+      <section data-tab-panel="metadata">
+        <DemoBlock
+          title="JSON-LD VideoObject"
+          description="Pass metadata to inject a <script type='application/ld+json'> in the DOM. View source to inspect."
+        >
+          <div style="width: 100%; margin: 0 auto; aspect-ratio: 16 / 9; border: 1px solid #22252a;">
+            <SmartVideoDemo
+              hlsSrc={HLS}
+              src="/videos/fallback"
+              poster={posterImage}
+              class=""
+              autoplay={false}
+              controls={true}
+              muted={false}
+              metadata={{
+                title: "Norwegian Fjell – Demo",
+                description: "Demonstration clip showcasing SmartVideo metadata injection for better video SEO.",
+                uploadDate: new Date("2024-01-01T12:00:00Z"),
+                duration: "PT1M5S",
+                thumbnailUrl: posterImage.src ?? undefined,
+              }}
+            />
+          </div>
+        </DemoBlock>
+      </section>
+
+      <!-- Panel: Poster tuning -->
+      <section data-tab-panel="poster">
+        <DemoBlock
+          title="Poster with vignette (subtle)"
+          description="Use SmartImage props on the poster to guide focus or improve contrast."
+        >
+          <div style="width: 100%; margin: 0 auto; aspect-ratio: 16 / 9; border: 1px solid #22252a;">
+            <SmartVideoDemo
+              hlsSrc={HLS}
+              src="/videos/fallback"
+              poster={posterImage}
+              class="rounded-xl"
+              autoplay={false}
+              controls={true}
+              imgVignetteRadius={70}
+              imgVignetteStrength={0.35}
+            />
+          </div>
+        </DemoBlock>
+
+        <DemoBlock title="Poster without vignette" description="Compare to the default poster rendering.">
+          <div style="width: 100%; margin: 0 auto; aspect-ratio: 16 / 9; border: 1px solid #22252a;">
+            <SmartVideoDemo
+              hlsSrc={HLS}
+              src="/videos/fallback"
+              poster={posterImage}
+              class="rounded-xl"
+              controls={true}
+            />
+          </div>
+        </DemoBlock>
+      </section>
+    </Fragment>
+  </Tabs>
+</DemoLayout>

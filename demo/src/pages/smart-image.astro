@@ -1,0 +1,142 @@
+---
+import DemoLayout from "../layouts/DemoLayout.astro";
+import Tabs from "../components/Tabs.astro";
+import DemoBlock from "../components/DemoBlock.astro";
+import InspectorTable from "../components/InspectorTable.astro";
+
+import { SmartImage as SmartImageDemo } from "@alos-no/astro-media";
+import hero from "../assets/poster.jpg"; // reuse existing asset
+---
+
+<DemoLayout title="Astro Media — SmartImage">
+  <div class="callout">
+    <strong>SmartImage</strong> demonstrates responsive images using <code>astro:assets</code>, multiple formats, and
+    optional vignette support. This page shows local vs. remote images, sizes/widths behavior, and a param sweep for
+    vignette controls. Live inspectors update in real time as the selected source changes.
+  </div>
+
+  <Tabs
+    tabs={[
+      { id: "local", label: "Local optimized" },
+      { id: "remote", label: "Remote URL" },
+      { id: "vignette", label: "Vignette variations" },
+    ]}
+    initialId="local"
+  >
+    <Fragment slot="panels">
+      <!-- Panel: Local optimized -->
+      <section data-tab-panel="local">
+        <DemoBlock
+          title="Local import → optimized <picture>"
+          description="Astro generates AVIF+WebP (by default) in multiple widths. Resize the window to see candidate changes (only works in increasing order)."
+        >
+          <div class="demo-grid">
+            <div id="img-local-1" style="width: 100%; border: 1px solid #22252a; padding: 0.5rem;">
+              <SmartImageDemo
+                src={hero}
+                alt="Local optimized example"
+                class="rounded-lg"
+                widths={[320, 480, 640, 750, 828, 960, 1080, 1280, 1536, 1920]}
+                sizes="100vw"
+                loading="eager"
+                style="width: 100%; height: auto;"
+              />
+            </div>
+
+            <InspectorTable id="img-local-1-inspector" title="Local optimized — Live inspector" />
+          </div>
+        </DemoBlock>
+
+        <DemoBlock
+          title="Custom widths + sizes"
+          description="Override widths and provide an explicit sizes attribute. Note: above 960px on 1× displays this example clamps the slot to 960px, so the chosen candidate may appear constant by design."
+        >
+          <div class="demo-grid">
+            <div id="img-local-2" style="width: 100%; border: 1px solid #22252a; padding: 0.5rem;">
+              <SmartImageDemo
+                src={hero}
+                alt="Custom widths and sizes"
+                class="rounded-lg"
+                widths={[640, 960, 1280]}
+                sizes="(max-width: 960px) 90vw, 960px"
+                style="width: 100%; height: auto;"
+              />
+            </div>
+
+            <InspectorTable id="img-local-2-inspector" title="Custom widths + sizes — Live inspector" />
+          </div>
+        </DemoBlock>
+      </section>
+
+      <!-- Panel: Remote -->
+      <section data-tab-panel="remote">
+        <DemoBlock
+          title="Remote URL → plain <img>"
+          description="When src is a string URL, Astro bypasses optimization and renders <img> directly."
+        >
+          <div class="demo-grid">
+            <div id="img-remote-1" style="width: 100%; border: 1px solid #22252a; padding: 0.5rem;">
+              <SmartImageDemo
+                src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1920"
+                alt="Remote image example"
+                class="rounded-lg"
+                loading="lazy"
+                style="width: 100%; height: auto;"
+              />
+            </div>
+
+            <InspectorTable id="img-remote-1-inspector" title="Remote URL — Live inspector" />
+          </div>
+        </DemoBlock>
+      </section>
+
+      <!-- Panel: Vignette -->
+      <section data-tab-panel="vignette">
+        <DemoBlock title="Vignette — soft edge" description="radius=70, strength=0.4">
+          <div class="demo-grid">
+            <div id="img-vignette-1" style="width: 100%; border: 1px solid #22252a; padding: 0.5rem;">
+              <SmartImageDemo
+                src={hero}
+                alt="Vignette soft"
+                class="rounded-xl"
+                vignetteRadius={70}
+                vignetteStrength={0.4}
+                style="object-fit: cover; width: 100%; height: auto;"
+              />
+            </div>
+
+            <InspectorTable id="img-vignette-1-inspector" title="Vignette (soft) — Live inspector" />
+          </div>
+        </DemoBlock>
+
+        <DemoBlock title="Vignette — stronger" description="radius=55, strength=0.65">
+          <div class="demo-grid">
+            <div id="img-vignette-2" style="width: 100%; border: 1px solid #22252a; padding: 0.5rem;">
+              <SmartImageDemo
+                src={hero}
+                alt="Vignette strong"
+                class="rounded-xl"
+                vignetteRadius={55}
+                vignetteStrength={0.65}
+                style="object-fit: cover; width: 100%; height: auto;"
+              />
+            </div>
+
+            <InspectorTable id="img-vignette-2-inspector" title="Vignette (strong) — Live inspector" />
+          </div>
+        </DemoBlock>
+      </section>
+    </Fragment>
+  </Tabs>
+</DemoLayout>
+
+<script type="module">
+  import { initImageInspector } from "/src/utils/inspectors.js";
+
+  // Wire up all inspectors on this page.
+  initImageInspector("img-local-1", "img-local-1-inspector");
+  initImageInspector("img-local-2", "img-local-2-inspector");
+  initImageInspector("img-remote-1", "img-remote-1-inspector");
+  initImageInspector("img-vignette-1", "img-vignette-1-inspector");
+  initImageInspector("img-vignette-2", "img-vignette-2-inspector");
+</script>
