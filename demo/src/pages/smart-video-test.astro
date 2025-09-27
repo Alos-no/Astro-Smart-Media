@@ -42,11 +42,13 @@ import posterImage from "../assets/poster.jpg";
 
     <!-- Single AUTOPLAY section expected by the tests -->
     <div id="autoplay-video-wrapper" class="video-container">
+      <!-- Start unmuted so Chromium/Firefox reliably block the first play() and trigger our "muted retry" log -->
       <SmartVideo
         hlsSrc="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
         src="/videos/fallback"
         poster={posterImage}
         class=""
+        muted={false}
       />
     </div>
 

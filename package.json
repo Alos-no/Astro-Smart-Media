@@ -17,7 +17,7 @@
     "release:version": "changeset version",
     "release:publish": "changeset publish",
     "release:dry": "pnpm publish -r --dry-run --access public --no-git-checks",
-    "ci:publish": "pnpm publish -r --access public",
+    "ci:publish": "pnpm publish -r --access public --provenance",
     "demo": "pnpm --filter demo dev -- --open",
     "demo:preview": "pnpm --filter demo build && pnpm --filter demo preview -- --open"
   },

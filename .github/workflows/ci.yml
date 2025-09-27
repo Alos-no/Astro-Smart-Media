@@ -36,7 +36,9 @@ jobs:
         run: pnpm test
 
       - name: Install Playwright browsers
+        if: ${{ vars.RUN_E2E == '1' }}
         run: npx playwright install --with-deps
 
       - name: Run E2E tests (Playwright)
+        if: ${{ vars.RUN_E2E == '1' }}
         run: pnpm test:e2e
