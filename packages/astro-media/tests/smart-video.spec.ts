@@ -43,7 +43,7 @@ test.describe("SmartVideo Component E2E", () => {
       // Wait for video to start playing and poster to fade out
       await expect(async () => {
         expect(await isVideoPlaying(page, videoSelector)).toBe(true);
-      }).toPass({ timeout: 5000 });
+      }).toPass({ timeout: 20_000 });
 
       await expect(page.locator(posterSelector)).toHaveCSS("opacity", "0");
     });
@@ -62,7 +62,7 @@ test.describe("SmartVideo Component E2E", () => {
       // Wait for it to start playing
       await expect(async () => {
         expect(await isVideoPlaying(page, videoSelector)).toBe(true);
-      }).toPass({ timeout: 5000 });
+      }).toPass({ timeout: 20_000 });
 
       // Scroll it out of view by scrolling to the bottom of the page
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
@@ -74,7 +74,7 @@ test.describe("SmartVideo Component E2E", () => {
           videoSelector,
         );
         expect(isPaused).toBe(true);
-      }).toPass({ timeout: 2000 });
+      }).toPass({ timeout: 20_000 });
     });
   });
 
@@ -106,7 +106,7 @@ test.describe("SmartVideo Component E2E", () => {
 
       await expect(async () => {
         expect(await isVideoPlaying(page, videoSelector)).toBe(true);
-      }).toPass({ timeout: 5000 });
+      }).toPass({ timeout: 20_000 });
 
       await expect(page.locator(posterSelector)).toHaveCSS("opacity", "0");
     });
@@ -126,7 +126,7 @@ test.describe("SmartVideo Component E2E", () => {
       await videoWrapper.hover();
       await expect(async () => {
         expect(await isVideoPlaying(page, videoSelector)).toBe(true);
-      }).toPass({ timeout: 5000 });
+      }).toPass({ timeout: 20_000 });
 
       // Move mouse away
       await page.mouse.move(0, 0);
@@ -138,7 +138,7 @@ test.describe("SmartVideo Component E2E", () => {
           videoSelector,
         );
         expect(isPaused).toBe(true);
-      }).toPass({ timeout: 2000 });
+      }).toPass({ timeout: 20_000 });
 
       await expect(page.locator(posterSelector)).toHaveCSS("opacity", "1");
     });

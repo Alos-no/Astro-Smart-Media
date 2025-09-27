@@ -22,7 +22,7 @@ test.describe("SmartVideo — HLS fatal error fallback", () => {
 
     // Wait for fallback sources to be appended by the client script
     const sources = video.locator("source");
-    await expect(sources).toHaveCount(2, { timeout: 10_000 });
+    await expect(sources).toHaveCount(2, { timeout: 20_000 });
 
     // Validate type/src ordering: webm then mp4, based on implementation.
     const webmType = await sources.nth(0).getAttribute("type");

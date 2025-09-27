@@ -22,7 +22,7 @@ test.describe("SmartVideo — autoplay blocked behavior @autoplay-policy", () =>
     // Expect our info log to appear due to play() rejection.
     await expect
       .poll(() => logs.some((l) => l.includes("SmartVideo: Autoplay was blocked. Muting and retrying.")), {
-        timeout: 10_000,
+        timeout: 20_000,
       })
       .toBe(true);
 

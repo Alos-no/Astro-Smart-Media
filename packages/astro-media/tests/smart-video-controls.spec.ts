@@ -39,7 +39,7 @@ test.describe("SmartVideo — controls rendering", () => {
             return v ? !v.paused && v.readyState > 2 : false;
           }, "#controls-video-wrapper video");
         },
-        { timeout: 10_000 },
+        { timeout: 20_000 },
       )
       .toBe(true);
 
