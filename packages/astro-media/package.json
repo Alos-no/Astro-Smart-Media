@@ -1,6 +1,6 @@
 {
   "name": "@alos-no/astro-media",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "Reusable Astro media components: optimized images, and background video with HLS fallback.",
   "homepage": "https://github.com/alos-no/astro-media#readme",

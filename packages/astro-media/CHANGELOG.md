@@ -1,5 +1,11 @@
 # @alos-no/astro-media
 
+## 1.1.0
+
+### Minor Changes
+
+- 66ec1dc: Added Sizing strategy
+
 ## 1.0.0
 
 ### Major Changes
