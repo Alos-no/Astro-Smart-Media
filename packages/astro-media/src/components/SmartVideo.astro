@@ -153,9 +153,12 @@ export interface Props {
    * Framework-agnostic sizing behavior for the root container.
    * - "fill": always set `width: 100%` and `height: 100%` inline on the root.
    * - "none": do not set inline width/height; sizing is left entirely to the caller’s CSS.
++  * - "intrinsic": let the `<video>` be in normal flow (`width:100%; height:auto`) so height is
++  *   computed from its intrinsic aspect ratio. The poster matches this behavior. Useful when
++  *   you do not know the media dimensions ahead of time and want automatic height.
    * @default "fill"
    */
-  sizeStrategy?: "fill" | "none";
+  sizeStrategy?: "fill" | "none" | "intrinsic";
 }
 
 // #region Extract and Process Props
@@ -216,6 +219,19 @@ const rootStyle = [
 ]
   .filter(Boolean)
   .join(" ");
+
+/**
+ * Inline styles for the `<video>` based on sizing strategy.
+ * - intrinsic: use the element's intrinsic aspect ratio to compute height.
+ * - others: keep absolute cover behavior for background-style usage.
+ */
+const videoStyle =
+  sizeStrategy === "intrinsic"
+    ? "display: block; position: static; width: 100%; height: auto; object-fit: contain; z-index: 1;"
+    : "position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1;";
+
+/** Keep poster visual behavior in sync with sizing strategy. */
+const posterObjectFit = sizeStrategy === "intrinsic" ? "contain" : "cover";
 
 // ---
 // #endregion
@@ -284,7 +300,7 @@ const videoMetadata = metadata && {
           quality={imgQuality}
           vignetteRadius={imgVignetteRadius}
           vignetteStrength={imgVignetteStrength}
-          style="width: 100%; height: 100%; object-fit: cover;"
+          style={`width: 100%; height: 100%; object-fit: ${posterObjectFit};`}
         />
       </div>
     )
@@ -302,7 +318,7 @@ const videoMetadata = metadata && {
     controls={controls ? true : undefined}
     playsinline={playsinline ? true : undefined}
     webkit-playsinline={playsinline ? true : undefined}
-    style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1;"
+    style={videoStyle}
   >
     <!-- Fallback message for browsers that don't support the <video> tag. -->
     <p>Your browser doesn't support HTML5 video.</p>
@@ -557,10 +573,15 @@ const videoMetadata = metadata && {
 
       // Use hls.js for other browsers that support Media Source Extensions.
       if (Hls && Hls.isSupported()) {
+        // Conservative, stability-oriented defaults. See hls.js config docs.
         this._hlsInstance = new Hls({
           startLevel: -1,
           startFragPrefetch: true,
-          autoStartLoad: true, // Let HLS manage loading, but observer will manage play state.
+          autoStartLoad: true,
+          capLevelToPlayerSize: true,
+          lowBufferWatchdogPeriod: 0.5,
+          highBufferWatchdogPeriod: 2,
+          nudgeMaxRetry: 3,
         });
 
         this._hlsInstance.loadSource(this._hlsSrc);
@@ -574,11 +595,38 @@ const videoMetadata = metadata && {
         });
 
         this._hlsInstance.on(Hls.Events.ERROR, (event, data) => {
-          console.error("SmartVideo: HLS.js error:", data.details);
-          if (data.fatal) {
-            console.warn("SmartVideo: HLS.js fatal error. Attempting to switch to fallback source.");
-            this._fallbackFromHls();
+          const details = (data && (data as any).details) || "unknown";
+          const fatal = !!(data && (data as any).fatal);
+
+          // Downgrade noisy, non-fatal stall logs.
+          if (!fatal) {
+            if (details === "bufferStalledError" || details === "bufferNudgeOnStall") {
+              console.debug("SmartVideo: non-fatal HLS stall:", details);
+            } else {
+              console.warn("SmartVideo: non-fatal HLS error:", details);
+            }
+            return;
           }
+
+          // Attempt targeted recovery before falling back.
+          try {
+            const type = (data as any).type;
+            if (type === Hls.ErrorTypes.NETWORK_ERROR) {
+              console.warn("SmartVideo: fatal NETWORK error; retrying startLoad().");
+              this._hlsInstance?.startLoad();
+              return;
+            }
+            if (type === Hls.ErrorTypes.MEDIA_ERROR) {
+              console.warn("SmartVideo: fatal MEDIA error; attempting recoverMediaError().");
+              this._hlsInstance?.recoverMediaError();
+              return;
+            }
+          } catch {
+            // ignore and fall through to fallback
+          }
+
+          console.warn("SmartVideo: unrecoverable HLS fatal error; switching to MP4/WebM fallback.");
+          this._fallbackFromHls();
         });
 
         return true;
