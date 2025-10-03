@@ -129,6 +129,14 @@ export interface Props {
   playOnHover?: boolean;
 
   /**
+   * When set to "on-error", the poster will NOT be rendered initially and will only
+   * be injected into the DOM if the video fails to load (native error or after HLS
+   * fallback also errors). Default "eager" preserves existing behavior.
+   * @default "eager"
+   */
+  posterLoadStrategy?: "eager" | "on-error";
+
+  /**
    * Rich metadata for SEO (schema.org `VideoObject`). If provided, a
    * `<script type="application/ld+json">` tag will be injected.
    */
@@ -150,15 +158,41 @@ export interface Props {
   imgQuality?: number;
 
   /**
+   * Visual resize strategy for both the poster and the <video>.
+   * Maps to CSS `object-fit`.
+   * @default 'cover' (or 'contain' when sizeStrategy === 'intrinsic')
+   */
+  fit?: "cover" | "contain" | "fill" | "none" | "scale-down";
+
+  /**
+   * Crop anchor for poster/video. Maps to CSS `object-position` (e.g. "center", "top",
+   * "50% 30%", "left bottom").
+   * @default 'center'
+   */
+  objectPosition?: string;
+
+  /**
    * Framework-agnostic sizing behavior for the root container.
    * - "fill": always set `width: 100%` and `height: 100%` inline on the root.
    * - "none": do not set inline width/height; sizing is left entirely to the caller’s CSS.
-+  * - "intrinsic": let the `<video>` be in normal flow (`width:100%; height:auto`) so height is
-+  *   computed from its intrinsic aspect ratio. The poster matches this behavior. Useful when
-+  *   you do not know the media dimensions ahead of time and want automatic height.
+   * - "intrinsic": let the `<video>` be in normal flow (`width:100%; height:auto`) so height is
+   *   computed from its intrinsic aspect ratio. The poster matches this behavior. Useful when
+   *   you do not know the media dimensions ahead of time and want automatic height.
    * @default "fill"
    */
   sizeStrategy?: "fill" | "none" | "intrinsic";
+
+  /**
+   * Optional HTML5 text tracks to attach to the <video>. Used for time-aligned metadata
+   * (e.g., chapter/segment keys).
+   */
+  tracks?: Array<{
+    kind: "metadata" | "chapters" | "subtitles" | "captions" | "descriptions";
+    src: string;
+    label?: string;
+    srclang?: string;
+    default?: boolean;
+  }>;
 }
 
 // #region Extract and Process Props
@@ -183,7 +217,11 @@ const {
   imgWidths,
   imgFormats,
   imgQuality,
+  fit = "cover",
+  objectPosition = "center",
   sizeStrategy = "fill",
+  tracks = [],
+  posterLoadStrategy = "eager",
 } = Astro.props;
 
 // ---
@@ -203,6 +241,11 @@ function getSourceString(source: string | ImageMetadata): string {
 }
 
 const posterSrc = poster ? getSourceString(poster) : undefined;
+const posterMode = posterLoadStrategy === "on-error" ? "on-error" : "eager";
+
+/** Resolve effective visual strategy defaults. */
+const effectiveFit = (fit ?? "cover") as "cover" | "contain" | "fill" | "none" | "scale-down";
+const effectiveObjectPosition = objectPosition ?? "center";
 
 /**
  * Compute inline style for the root container:
@@ -227,11 +270,11 @@ const rootStyle = [
  */
 const videoStyle =
   sizeStrategy === "intrinsic"
-    ? "display: block; position: static; width: 100%; height: auto; object-fit: contain; z-index: 1;"
-    : "position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1;";
+    ? `display: block; position: static; width: 100%; height: auto; object-fit: ${effectiveFit}; object-position: ${effectiveObjectPosition}; z-index: 1;`
+    : `position: absolute; inset: 0; width: 100%; height: 100%; object-fit: ${effectiveFit}; object-position: ${effectiveObjectPosition}; z-index: 1;`;
 
-/** Keep poster visual behavior in sync with sizing strategy. */
-const posterObjectFit = sizeStrategy === "intrinsic" ? "contain" : "cover";
+/** Poster mirrors the same visual behavior. */
+const posterObjectFit = effectiveFit;
 
 // ---
 // #endregion
@@ -270,6 +313,7 @@ const videoMetadata = metadata && {
   data-play-on-hover={playOnHover ? "true" : "false"}
   class={`${className}`}
   style={rootStyle}
+  data-poster-mode={poster ? posterMode : undefined}
 >
   <!-- Inject the JSON-LD schema if it was created. -->
   {videoMetadata && <script type="application/ld+json" set:html={JSON.stringify(videoMetadata)} />}
@@ -279,7 +323,7 @@ const videoMetadata = metadata && {
     absolutely to cover the video element until playback begins.
   -->
   {
-    poster && (
+    poster && posterMode === "eager" && (
       <div
         data-poster
         style="
@@ -288,6 +332,7 @@ const videoMetadata = metadata && {
           z-index: 2; /* Ensure poster paints above <video> */
           pointer-events: none; /* Overlay never blocks hover/clicks on container */
           transition: opacity 150ms ease-out;
+          overflow: hidden; /* Clip to container so cropping matches SmartImage behavior */
         "
       >
         <SmartImage
@@ -300,9 +345,47 @@ const videoMetadata = metadata && {
           quality={imgQuality}
           vignetteRadius={imgVignetteRadius}
           vignetteStrength={imgVignetteStrength}
-          style={`width: 100%; height: 100%; object-fit: ${posterObjectFit};`}
+          fit={posterObjectFit}
+          position={effectiveObjectPosition}
+          style="width: 100%; height: 100%;"
         />
       </div>
+    )
+  }
+
+  {
+    poster && posterMode === "on-error" && (
+      <>
+        <div
+          data-poster
+          style="
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            pointer-events: none;
+            transition: opacity 150ms ease-out;
+            overflow: hidden;
+          "
+        ></div>
+
+        <!-- Inert poster markup: no network until injected on error -->
+        <template data-poster-template>
+          <SmartImage
+            src={poster}
+            alt={metadata?.title || "Video poster"}
+            loading="eager"
+            sizes={imgSizes}
+            widths={imgWidths}
+            formats={imgFormats}
+            quality={imgQuality}
+            vignetteRadius={imgVignetteRadius}
+            vignetteStrength={imgVignetteStrength}
+            fit={posterObjectFit}
+            position={effectiveObjectPosition}
+            style="width: 100%; height: 100%;"
+          />
+        </template>
+      </>
     )
   }
 
@@ -318,8 +401,21 @@ const videoMetadata = metadata && {
     controls={controls ? true : undefined}
     playsinline={playsinline ? true : undefined}
     webkit-playsinline={playsinline ? true : undefined}
+    crossorigin="anonymous"
     style={videoStyle}
   >
+    {
+      Array.isArray(tracks) &&
+        tracks.map((trk) => (
+          <track
+            kind={trk.kind}
+            src={trk.src}
+            label={trk.label}
+            srclang={trk.srclang}
+            default={trk.default ? true : undefined}
+          />
+        ))
+    }
     <!-- Fallback message for browsers that don't support the <video> tag. -->
     <p>Your browser doesn't support HTML5 video.</p>
   </video>
@@ -347,12 +443,28 @@ const videoMetadata = metadata && {
     private _hlsInstance: Hls | null = null;
     private _observer: IntersectionObserver | null = null;
 
+    // HLS readiness and retry bookkeeping (hls.js path only).
+    private _hlsReady: boolean = false;                  // Set true on MANIFEST_PARSED
+    private _hlsStartupTimer: number | null = null;      // Watchdog to avoid hanging on startup
+    private _hlsNetworkErrorCount: number = 0;           // Bounded retries for fatal NETWORK errors
+
     // Configuration flags read from data attributes
     private _hlsSrc: string | null;
     private _fallbackSrc: string | null;
     private _playOnHover: boolean;
     private _shouldAutoplay: boolean;
     private _hlsFailed = false;
+
+    // Poster lazy-injection state
+    private _posterMode: "eager" | "on-error";
+    private _posterTemplate: HTMLTemplateElement | null;
+    private _posterInjected = false;
+
+    // Hover bookkeeping:
+    //  - _hoverTarget is the element that owns hover intent (wrapper if present, otherwise the component container).
+    //  - _isHovering reflects whether the pointer is currently over _hoverTarget.
+    private _hoverTarget: HTMLElement | null = null;
+    private _isHovering: boolean = false;
 
     /**
      * Initializes the player instance.
@@ -375,10 +487,23 @@ const videoMetadata = metadata && {
       this._fallbackSrc = container.dataset.srcFallback || null;
       this._playOnHover = container.dataset.playOnHover === "true";
       this._shouldAutoplay = !this._playOnHover && container.dataset.autoplay === "true";
+      this._posterMode = (container.dataset.posterMode as "eager" | "on-error") || "eager";
+      this._posterTemplate = container.querySelector<HTMLTemplateElement>("[data-poster-template]");
 
       if (this._shouldAutoplay) {
         this._videoElement.setAttribute("autoplay", "");
       }
+
+      // Mark initial visibility synchronously to avoid waiting for IO callback
+      const r = this._container.getBoundingClientRect();
+
+      if (r.top < window.innerHeight && r.bottom > 0 && r.left < window.innerWidth && r.right > 0) {
+        this._container.setAttribute("data-is-intersecting", "true");
+      }
+
+      // Resolve the element users actually hover: prefer the wrapper parent when present.
+      this._hoverTarget =
+        this._container.parentElement instanceof HTMLElement ? this._container.parentElement : this._container;
     }
 
     /**
@@ -404,6 +529,39 @@ const videoMetadata = metadata && {
     }
 
     /**
+     * Attempt playback only when the media is ready. If we're in hover mode,
+     * we additionally require that the pointer is still over the hover target
+     * at the instant we decide to start playback.
+     */
+    private _playWhenReady(): void {
+      // If this path was triggered by hover, ensure hover intent is still active.
+      if (this._playOnHover && (!this._hoverTarget || !this._isHovering)) {
+        return;
+      }
+  
+      // HAVE_CURRENT_DATA (2) is sufficient to begin playback.
+      if (this._videoElement.readyState >= 2) {
+        if (!this._playOnHover || this._isHovering) {
+          this._attemptPlay();
+        }
+        return;
+      }
+  
+      const onReady = (): void => {
+        this._videoElement.removeEventListener("canplay", onReady);
+  
+        // Guard again: if the user left before readiness, do nothing.
+        if (this._playOnHover && (!this._hoverTarget || !this._isHovering)) {
+          return;
+        }
+  
+        this._attemptPlay();
+      };
+
+      this._videoElement.addEventListener("canplay", onReady, { once: true });
+    }
+
+    /**
      * Attempt autoplay if we're intersecting and autoplay is enabled.
      * Called from readiness signals (HLS MANIFEST_PARSED, media 'canplay').
      */
@@ -412,7 +570,12 @@ const videoMetadata = metadata && {
         return;
       }
 
-      if (this._container.getAttribute("data-is-intersecting") === "true") {
+      const alreadyFlagged = this._container.getAttribute("data-is-intersecting") === "true";
+      const rect = this._container.getBoundingClientRect();
+      const visibleNow =
+        rect.top < window.innerHeight && rect.bottom > 0 && rect.left < window.innerWidth && rect.right > 0;
+
+      if (alreadyFlagged || visibleNow) {
         this._attemptPlay();
       }
     }
@@ -452,10 +615,59 @@ const videoMetadata = metadata && {
         }
       });
 
+      // If the video encounters an unrecoverable error (native path or after fallback),
+      // inject the poster only when posterMode === "on-error".
+      this._videoElement.addEventListener("error", () => {
+        this._handleVideoError();
+      });
+
       // Handle hover-based playback.
       if (this._playOnHover) {
-        this._container.addEventListener("mouseenter", () => this._attemptPlay());
-        this._container.addEventListener("mouseleave", () => this._videoElement.pause());
+        // Attach to the element users actually hover (wrapper if present).
+        const target = this._hoverTarget ?? this._container;
+  
+        const onEnter = (): void => {
+          this._isHovering = true;
+          this._playWhenReady();
+        };
+  
+        const onLeave = (): void => {
+          this._isHovering = false;
+          this._videoElement.pause();
+        };
+  
+        target.addEventListener("mouseenter", onEnter);
+        target.addEventListener("mouseleave", onLeave);
+      }
+    }
+
+    /**
+     * Injects the poster image from the inert template if configured to do so,
+     * ensuring no network request occurred until this failure moment.
+     */
+    private _ensurePosterInjected(): void {
+      if (this._posterInjected) {
+        return;
+      }
+
+      if (!this._posterElement || !this._posterTemplate) {
+        return;
+      }
+
+      const fragment = this._posterTemplate.content.cloneNode(true) as DocumentFragment;
+      this._posterElement.appendChild(fragment);
+
+      this._posterInjected = true;
+      this._posterElement.style.opacity = "1";
+    }
+
+    /**
+     * Handle native video errors by showing the poster when configured for on-error.
+     */
+    private _handleVideoError(): void {
+
+      if (this._posterMode === "on-error") {
+        this._ensurePosterInjected();
       }
     }
 
@@ -491,6 +703,12 @@ const videoMetadata = metadata && {
       // Mark that we should not attempt HLS again during this lifecycle.
       this._hlsFailed = true;
 
+      // Stop any startup watchdog.
+      if (this._hlsStartupTimer !== null) {
+        clearTimeout(this._hlsStartupTimer);
+        this._hlsStartupTimer = null;
+      }
+
       // Tear down any active hls.js instance (no-op if null).
       this._hlsInstance?.destroy();
 
@@ -500,6 +718,13 @@ const videoMetadata = metadata && {
       // Clear any native src and switch to appended sources.
       this._videoElement.removeAttribute("src");
       this._appendFallbackSources();
+
+      // If no MP4/WebM fallback was provided, ensure the poster is shown.
+      if (!this._fallbackSrc) {
+        console.warn("SmartVideo: No MP4/WebM fallback provided; showing poster due to HLS failure.");
+        this._ensurePosterInjected();
+        return;
+      }
 
       // If we are visible and expected to autoplay, try to play now.
       if (this._container.getAttribute("data-is-intersecting") === "true" && this._videoElement.paused) {
@@ -541,6 +766,11 @@ const videoMetadata = metadata && {
         const onError = (): void => {
           settle();
           console.warn("SmartVideo: Native HLS failed to become ready. Falling back to <source>.");
+
+          if (this._posterMode === "on-error") {
+            this._ensurePosterInjected();
+          }
+
           this._fallbackFromHls();
         };
 
@@ -560,7 +790,7 @@ const videoMetadata = metadata && {
       }
 
       // Dynamically import hls.js only when needed to avoid blocking page load.
-      let HlsMod: Hls;
+      let HlsMod: typeof Hls;
 
       try {
         HlsMod = await import("hls.js");
@@ -573,10 +803,10 @@ const videoMetadata = metadata && {
 
       // Use hls.js for other browsers that support Media Source Extensions.
       if (Hls && Hls.isSupported()) {
-        // Conservative, stability-oriented defaults. See hls.js config docs.
+        // Conservative, startup-focused defaults. See hls.js config docs.
         this._hlsInstance = new Hls({
-          startLevel: -1,
-          startFragPrefetch: true,
+          startLevel: 0, // ensure smallest rendition first for fastest first frame
+          startFragPrefetch: true, // fetch next frag while playing current
           autoStartLoad: true,
           capLevelToPlayerSize: true,
           lowBufferWatchdogPeriod: 0.5,
@@ -587,10 +817,24 @@ const videoMetadata = metadata && {
         this._hlsInstance.loadSource(this._hlsSrc);
         this._hlsInstance.attachMedia(this._videoElement);
 
+        // Startup watchdog: if MANIFEST_PARSED never arrives, pivot to fallback/poster.
+        this._hlsStartupTimer = window.setTimeout(() => {
+          if (!this._hlsReady && !this._hlsFailed) {
+            console.warn("SmartVideo: HLS startup timed out; switching to MP4/WebM fallback or poster.");
+            this._fallbackFromHls();
+          }
+        }, 4000);
+
         // When the manifest is parsed, HLS is ready to start playback.
         // If we're intersecting and autoplay is desired, try again now.
         this._hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
           this._container.setAttribute("data-playback-mode", "hls.js");
+          this._hlsReady = true;
+
+          if (this._hlsStartupTimer !== null) {
+            clearTimeout(this._hlsStartupTimer);
+            this._hlsStartupTimer = null;
+          }
           this._maybeAutoplayOnReady();
         });
 
@@ -608,10 +852,30 @@ const videoMetadata = metadata && {
             return;
           }
 
+          // EARLY POSTER on first fatal error if requested, before any retry/pivot logic.
+          if (this._posterMode === "on-error") {
+            console.warn("SmartVideo: fatal HLS error; injecting poster.");
+            this._ensurePosterInjected();
+
+            // Also pivot off HLS so we don’t keep retrying behind the poster.
+            this._fallbackFromHls();
+
+            return;
+          }
+
           // Attempt targeted recovery before falling back.
           try {
             const type = (data as any).type;
             if (type === Hls.ErrorTypes.NETWORK_ERROR) {
+              // Allow a single bounded retry; pivot thereafter to avoid hanging on 404s.
+              this._hlsNetworkErrorCount += 1;
+
+              if (this._hlsNetworkErrorCount >= 2) {
+                console.warn("SmartVideo: fatal NETWORK error; exceeded retries; switching to MP4/WebM fallback or poster.");
+                this._fallbackFromHls();
+                return;
+              }
+
               console.warn("SmartVideo: fatal NETWORK error; retrying startLoad().");
               this._hlsInstance?.startLoad();
               return;
@@ -625,9 +889,9 @@ const videoMetadata = metadata && {
             // ignore and fall through to fallback
           }
 
-          console.warn("SmartVideo: unrecoverable HLS fatal error; switching to MP4/WebM fallback.");
-          this._fallbackFromHls();
-        });
+          console.warn("SmartVideo: unrecoverable HLS fatal error; switching to MP4/WebM fallback or poster.");
+           this._fallbackFromHls();
+         });
 
         return true;
       }
