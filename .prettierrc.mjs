@@ -13,9 +13,10 @@ export default {
     },
   ],
 
-  // House style (adjust if you like).
+  // House style.
   semi: true,
   printWidth: 120,
+  tabWidth: 2,
 
   // Let Prettier treat whitespace in HTML as insignificant (less early wrapping).
   // Default is "css" (conservative around inline elements). See docs.

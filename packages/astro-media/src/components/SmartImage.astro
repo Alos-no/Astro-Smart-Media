@@ -121,6 +121,42 @@ export interface Props {
    * @example 0.5
    */
   vignetteStrength?: number;
+
+  /**
+   * Visual resize strategy for the rendered image. Maps to CSS `object-fit`.
+   * @default 'cover'
+   */
+  fit?: "cover" | "contain" | "fill" | "none" | "scale-down";
+
+  /**
+   * Crop anchor for the image. Maps to CSS `object-position` (e.g. "center", "top", "50% 30%").
+   * @default 'center'
+   */
+  position?: string;
+
+  /**
+   * Optional credit label rendered as an overlay on the image.
+   * Provide plain text (HTML is not rendered).
+   * Example: "Photo © MjøsDrone"
+   */
+  credit?: string;
+
+  /**
+   * Where to place the credit overlay.
+   * @default 'bottom-right'
+   */
+  creditAnchor?: "top-left" | "top-right" | "bottom-right" | "bottom-left";
+
+  /**
+   * Override classes for the credit chip. If omitted, a sensible default is used.
+   * Provide Tailwind or plain CSS classes.
+   */
+  creditClass?: string;
+
+  /**
+   * Optional inline styles for the credit chip (applied to the chip wrapper).
+   */
+  creditStyle?: string;
 }
 
 const {
@@ -140,6 +176,8 @@ const {
   // so the wrapper must receive the sizing styles (width/height/object-fit) to match
   // the visible pixels of the media. The inner media then fills the wrapper.
   style: inlineStyle,
+  fit = "cover",
+  position = "center",
 
   // Pass-through for all other attributes (e.g. data-*).
   ...props
@@ -179,30 +217,88 @@ const innerImageClasses = removeRoundedClasses(className);
  */
 const vignetteActive = vignetteRadius !== undefined && vignetteStrength !== undefined;
 
-const wrapperStyle = vignetteActive
-  ? [inlineStyle, "position: relative;", "overflow: hidden;"].filter(Boolean).join(" ")
+/** Build styles ensuring object-fit works (requires width & height). */
+const fitStyle = `object-fit: ${fit};`;
+const positionStyle = `object-position: ${position};`;
+
+// Credit overlay inputs and overlay flag.
+const creditText = (Astro.props as Props).credit?.trim();
+const creditAnchor = (Astro.props as Props).creditAnchor ?? "bottom-right";
+const creditClassOverride = (Astro.props as Props).creditClass;
+const creditStyle = (Astro.props as Props).creditStyle;
+const creditActive = !!creditText;
+const overlayActive = vignetteActive || creditActive;
+
+// Wrapper classes must carry sizing. Keep rounded on wrapper, and also carry the original `class`.
+const wrapperClasses = [roundedClasses, className].filter(Boolean).join(" ").trim();
+
+// When any overlay is active, the wrapper becomes the positioning context for vignette/credit.
+// Give it position:relative, preserve caller inline styles, and clip if needed.
+// For local images, also offer an aspect-ratio fallback so the wrapper has a natural height
+// when authors did not specify explicit sizes.
+const aspectRatioFallback = overlayActive && isImageMetadata(src) ? `aspect-ratio: ${src.width}/${src.height};` : "";
+
+// IMPORTANT: We must also clip when ONLY a credit is present (no vignette, no rounded classes),
+// otherwise the absolutely-positioned chip may render outside of the image box in some layouts.
+// This ensures credit overlays are always constrained to the media bounds.
+const needsOverflowClip = vignetteActive || !!roundedClasses || creditActive;
+
+const wrapperStyle = overlayActive
+  ? [
+      inlineStyle, // caller sizing goes to the wrapper
+      "position: relative;", // credit positions against this
+      needsOverflowClip ? "overflow: hidden;" : undefined,
+      aspectRatioFallback, // harmless when explicit height is provided
+    ]
+      .filter(Boolean)
+      .join(" ")
   : undefined;
 
-const innerStyle = vignetteActive ? "width: 100%; height: 100%; object-fit: inherit;" : inlineStyle;
+const innerStyle = overlayActive
+  ? // With an overlay, make the media fill the wrapper so object-fit/position apply to the visible box.
+    ["width: 100%; height: 100%;", fitStyle, positionStyle].filter(Boolean).join(" ")
+  : [inlineStyle, fitStyle, positionStyle].filter(Boolean).join(" ");
+
+/** Framework-agnostic default chip style and anchor mapping. */
+const defaultCreditStyle = [
+  "pointer-events: none",
+  "position: absolute",
+  "z-index: 20",
+  "margin: 8px",
+  // Subtle text-only treatment: no chip background or borders
+  "font-size: 11px",
+  "line-height: 1.25",
+  "font-weight: 400",
+  "color: rgba(255,255,255,0.85)",
+  // Gentle contrast helper on busy imagery without a box
+  "text-shadow: 0 1px 2px rgba(0,0,0,0.45), 0 0 1px rgba(0,0,0,0.6)",
+  "user-select: none",
+].join("; ");
+
+function anchorToStyle(a: NonNullable<Props["creditAnchor"]>): string {
+  if (a === "top-left") return "top: 8px; left: 8px;";
+  if (a === "top-right") return "top: 8px; right: 8px;";
+  if (a === "bottom-left") return "bottom: 8px; left: 8px;";
+  return "bottom: 8px; right: 8px;";
+}
 ---
 
 {
   /**
    * Main render logic.
-   * We have two primary branches: one for when a vignette is applied, and one for when it's not.
+   * We have two primary branches: one for when an overlay (vignette or credit) is applied,
+   * and one for when it's not.
    *
-   * The vignette requires a wrapping `div` with `position: relative` and a sibling `div` for the
-   * gradient overlay. The wrapper must receive sizing styles so the overlay aligns with the
-   * visible image box (see MDN `object-fit`). The inner media then fills the wrapper box.
-   *
-   * Inside each branch, we further check if the `src` is `ImageMetadata` to decide whether
-   * to render an optimized `<Picture>` or a standard `<img>` for remote URLs.
+   * When an overlay is present, we wrap the media in a positioned container that also clips
+   * rounded corners. With vignette active, the wrapper receives inline sizing and object-fit
+   * so that the gradient conforms to the visible box. With credit-only, we keep sizing on the
+   * inner media and just provide a positioned overlay host.
    */
 }
 {
-  // Branch 1: A vignette is active.
-  vignetteActive ? (
-    <div class={`${roundedClasses}`} style={wrapperStyle}>
+  // Branch 1: Any overlay is active (vignette OR credit).
+  overlayActive ? (
+    <div class={wrapperClasses} style={wrapperStyle}>
       {/* Render the core image element (`<Picture>` or `<img>`) */}
       {isImageMetadata(src) ? (
         <Picture
@@ -228,23 +324,36 @@ const innerStyle = vignetteActive ? "width: 100%; height: 100%; object-fit: inhe
         Because the wrapper now owns the sizing, the radial gradient conforms
         to the same visible region as the image (no mismatch when object-fit crops).
       */}
-      <div
-        style={`
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
+      {vignetteActive && (
+        <div
+          style={`
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
           /* Fallback for very old browsers that don't support radial gradients. */
-          background: transparent;
+            background: transparent;
           
           /* Prefixed version for older Safari/Chrome. */
-          background: -webkit-radial-gradient(ellipse at center, transparent ${vignetteRadius}%, rgba(0,0,0,${vignetteStrength}) 100%);
+            background: -webkit-radial-gradient(ellipse at center, transparent ${vignetteRadius}%, rgba(0,0,0,${vignetteStrength}) 100%);
           
           /* Standard CSS syntax. */
-          background: radial-gradient(ellipse at center, transparent ${vignetteRadius}%, rgba(0,0,0,${vignetteStrength}) 100%);
-        `}
-      />
+            background: radial-gradient(ellipse at center, transparent ${vignetteRadius}%, rgba(0,0,0,${vignetteStrength}) 100%);
+          `}
+        />
+      )}
+
+      {/* Credit overlay (if provided) */}
+      {creditActive && (
+        <div
+          class={creditClassOverride}
+          style={[defaultCreditStyle, anchorToStyle(creditAnchor), creditStyle].filter(Boolean).join("; ")}
+          aria-hidden="true"
+        >
+          {creditText}
+        </div>
+      )}
     </div>
-  ) : // Branch 2: No vignette is active.
+  ) : // Branch 2: No overlays at all (render media directly)
   isImageMetadata(src) ? (
     // Render the `<Picture>` component directly.
     <Picture
