@@ -1,5 +1,11 @@
 # @alos-no/astro-media
 
+## 1.3.0
+
+### Minor Changes
+
+- 4728a0c: Added hlsMobileSrc and errorImg options
+
 ## 1.2.0
 
 ### Minor Changes
