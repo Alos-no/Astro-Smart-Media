@@ -208,11 +208,12 @@ const finalSizes = sizes ?? defaultSizes;
 // Move rounded-* classes to a wrapper when vignette is active so the overlay clips correctly.
 const roundedClasses = extractRoundedClasses(className);
 const innerImageClasses = removeRoundedClasses(className);
+const hasRounded = !!roundedClasses;
 
 /**
  * Compute wrapper vs inner styles:
  *  - With vignette: wrapper gets the caller’s inlineStyle (so the overlay’s box matches),
- *    and the inner media is forced to fill that box while inheriting object-fit.
+ *    and the inner media is forced to fill the wrapper while inheriting object-fit.
  *  - Without vignette: keep original behavior and apply inlineStyle directly to the media.
  */
 const vignetteActive = vignetteRadius !== undefined && vignetteStrength !== undefined;
@@ -249,6 +250,8 @@ const wrapperStyle = overlayActive
       "position: relative;", // credit positions against this
       needsOverflowClip ? "overflow: hidden;" : undefined,
       aspectRatioFallback, // harmless when explicit height is provided
+      // If the wrapper itself doesn't carry rounded classes, adopt the parent’s rounding.
+      !hasRounded ? "border-radius: inherit;" : undefined,
     ]
       .filter(Boolean)
       .join(" ")
@@ -256,7 +259,16 @@ const wrapperStyle = overlayActive
 
 const innerStyle = overlayActive
   ? // With an overlay, make the media fill the wrapper so object-fit/position apply to the visible box.
-    ["width: 100%; height: 100%;", fitStyle, positionStyle].filter(Boolean).join(" ")
+    [
+      "display: block;",
+      "width: 100%; height: 100%;",
+      fitStyle,
+      positionStyle,
+      // Always inherit wrapper rounding so pixels clip in Safari.
+      "border-radius: inherit;",
+    ]
+      .filter(Boolean)
+      .join(" ")
   : [inlineStyle, fitStyle, positionStyle].filter(Boolean).join(" ");
 
 /** Framework-agnostic default chip style and anchor mapping. */
@@ -301,6 +313,9 @@ function anchorToStyle(a: NonNullable<Props["creditAnchor"]>): string {
     <div class={wrapperClasses} style={wrapperStyle}>
       {/* Render the core image element (`<Picture>` or `<img>`) */}
       {isImageMetadata(src) ? (
+        /* Safari has long-standing sizing bugs with <picture style="display: contents">.
+         Keep <picture> as a real block box that fills its parent so the inner <img>
+         (which receives our width/height/object-fit) has a reliable containing block. */
         <Picture
           src={src}
           alt={alt}
@@ -310,13 +325,23 @@ function anchorToStyle(a: NonNullable<Props["creditAnchor"]>): string {
           quality={quality}
           loading={loading}
           class={innerImageClasses}
-          style={innerStyle}
+          style={["display: block;", innerStyle].filter(Boolean).join(" ")}
+          pictureAttributes={{
+            style: "display: block; width: 100%; height: 100%; border-radius: inherit; overflow: hidden;",
+          }}
           {...props}
         />
       ) : (
         // For remote images, `astro:assets` cannot be used. We fall back to a
         // standard `<img>` tag as per Astro's official guidance.
-        <img src={src as string} alt={alt} loading={loading} class={innerImageClasses} style={innerStyle} {...props} />
+        <img
+          src={src as string}
+          alt={alt}
+          loading={loading}
+          class={innerImageClasses}
+          style={["display: block;", innerStyle].filter(Boolean).join(" ")}
+          {...props}
+        />
       )}
 
       {/* 
@@ -365,11 +390,30 @@ function anchorToStyle(a: NonNullable<Props["creditAnchor"]>): string {
       quality={quality}
       loading={loading}
       class={className}
-      style={innerStyle}
+      style={["display: block;", innerStyle, !hasRounded ? "border-radius: inherit;" : undefined]
+        .filter(Boolean)
+        .join(" ")}
+      pictureAttributes={{
+        style: "display: block; width: 100%; height: 100%; border-radius: inherit; overflow: hidden;",
+      }}
       {...props}
     />
   ) : (
     // Render the standard `<img>` tag directly for remote images.
-    <img src={src as string} alt={alt} loading={loading} class={className} style={innerStyle} {...props} />
+    <img
+      src={src as string}
+      alt={alt}
+      loading={loading}
+      class={className}
+      style={[
+        "display: block;",
+        innerStyle,
+        // Do not override user-specified rounded-* on the image; only inherit when absent.
+        !hasRounded ? "border-radius: inherit;" : undefined,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      {...props}
+    />
   )
 }

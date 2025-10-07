@@ -272,6 +272,19 @@ function getSourceString(source: string | ImageMetadata): string {
 const posterSrc = poster ? getSourceString(poster) : undefined;
 const posterMode = posterLoadStrategy === "on-error" ? "on-error" : "eager";
 
+// Extract intrinsic poster dimensions when available (local ImageMetadata),
+// so the client can compute a safe aspect-ratio fallback if parent percent
+// heights do not resolve (common Safari behavior with aspect-ratio ancestors).
+const posterNaturalWidth =
+  typeof poster === "object" && poster !== null && "width" in (poster as any)
+    ? (poster as ImageMetadata).width
+    : undefined;
+
+const posterNaturalHeight =
+  typeof poster === "object" && poster !== null && "height" in (poster as any)
+    ? (poster as ImageMetadata).height
+    : undefined;
+
 /** Resolve effective visual strategy defaults. */
 const effectiveFit = (fit ?? "cover") as "cover" | "contain" | "fill" | "none" | "scale-down";
 const effectiveObjectPosition = objectPosition ?? "center";
@@ -285,9 +298,15 @@ const effectiveObjectPosition = objectPosition ?? "center";
 const rootStyle = [
   "position: relative;", // Ensure absolute children are anchored even without Tailwind.
   "overflow: hidden;", // Clip poster/video without relying on Tailwind.
+  "border-radius: inherit;", // Ensure clipping follows parent rounded corners (Safari quirk).
   "max-width: 100%;",
   sizeStrategy === "fill" ? "width: 100%;" : "",
+  // Safari can fail to resolve percentage heights when the parent’s height
+  // is derived via aspect-ratio or other intrinsic sizing. Provide both
+  // standard and WebKit intrinsic fallbacks, plus logical block-size.
   sizeStrategy === "fill" ? "height: 100%;" : "",
+  sizeStrategy === "fill" ? "height: -webkit-fill-available;" : "",
+  sizeStrategy === "fill" ? "block-size: 100%;" : "",
 ]
   .filter(Boolean)
   .join(" ");
@@ -299,8 +318,8 @@ const rootStyle = [
  */
 const videoStyle =
   sizeStrategy === "intrinsic"
-    ? `display: block; position: static; width: 100%; height: auto; object-fit: ${effectiveFit}; object-position: ${effectiveObjectPosition}; z-index: 1;`
-    : `position: absolute; inset: 0; width: 100%; height: 100%; object-fit: ${effectiveFit}; object-position: ${effectiveObjectPosition}; z-index: 1;`;
+    ? `display: block; position: static; width: 100%; height: auto; object-fit: ${effectiveFit}; object-position: ${effectiveObjectPosition}; border-radius: inherit; z-index: 1;`
+    : `position: absolute; inset: 0; width: 100%; height: 100%; object-fit: ${effectiveFit}; object-position: ${effectiveObjectPosition}; border-radius: inherit; z-index: 1;`;
 
 /** Poster mirrors the same visual behavior. */
 const posterObjectFit = effectiveFit;
@@ -315,7 +334,7 @@ const basePosterImageProps = poster
       vignetteStrength: imgVignetteStrength,
       fit: posterObjectFit,
       position: effectiveObjectPosition,
-      style: "width: 100%; height: 100%;",
+      style: "display: block; width: 100%; height: 100%; min-width: 100%; min-height: 100%;",
     }
   : null;
 
@@ -379,6 +398,8 @@ const videoMetadata = metadata && {
   data-poster-mode={poster ? posterMode : undefined}
   data-poster-loading-class={imgClass ? String(imgClass) : undefined}
   data-poster-error-class={errorImgClass ? String(errorImgClass) : undefined}
+  data-poster-width={posterNaturalWidth !== undefined ? String(posterNaturalWidth) : undefined}
+  data-poster-height={posterNaturalHeight !== undefined ? String(posterNaturalHeight) : undefined}
 >
   <!-- Inject the JSON-LD schema if it was created. -->
   {videoMetadata && <script type="application/ld+json" set:html={JSON.stringify(videoMetadata)} />}
@@ -404,6 +425,7 @@ const videoMetadata = metadata && {
           pointer-events: none; /* Overlay never blocks hover/clicks on container */
           transition: opacity 150ms ease-out;
           overflow: hidden; /* Clip to container so cropping matches SmartImage behavior */
+          border-radius: inherit; /* Ensure poster respects rounded corners inside Safari */
         "
       >
         {posterMode === "eager" && loadingPosterImageProps && <SmartImage {...loadingPosterImageProps} />}
@@ -533,6 +555,10 @@ const videoMetadata = metadata && {
     private _posterLoadingClassName: string = "";
     private _posterErrorClassName: string = "";
 
+    // Layout fallback bookkeeping (for old WebKit w/o CSS aspect-ratio).
+    private _layoutFallbackApplied: boolean = false;
+    private _onResizeBound: () => void = () => this._applyLayoutFallbackIfCollapsed();
+
     /**
      * Initializes the player instance.
      * @param {HTMLElement} container - The root `div` element of the component.
@@ -592,6 +618,18 @@ const videoMetadata = metadata && {
       if (this._posterElement && this._posterMode === "eager") {
         this._applyPosterClassForState("loading");
       }
+
+      // Finalize construction with a robust layout fallback:
+      // If Safari (or any engine) collapses percent heights and our container ends
+      // up with ~0px height, switch to a cross-browser ratio box that does not rely
+      // on CSS aspect-ratio (padding-bottom trick).
+      this._applyLayoutFallbackIfCollapsed();
+
+      // Re-check on the next frame (in case layout wasn’t final yet) and on viewport changes.
+      // If height becomes available later, we will revert the fallback to fill the container.
+      requestAnimationFrame(() => this._applyLayoutFallbackIfCollapsed());
+      window.addEventListener("resize", this._onResizeBound, { passive: true });
+      window.addEventListener("orientationchange", this._onResizeBound);
     }
 
     /**
@@ -750,6 +788,54 @@ const videoMetadata = metadata && {
 
         target.addEventListener("mouseenter", onEnter);
         target.addEventListener("mouseleave", onLeave);
+      }
+    }
+
+    /**
+     * When the root container ends up with zero (or near-zero) height due to
+     * percentage height resolution quirks (notably on Safari when a parent uses
+     * aspect-ratio), apply a safe, intrinsic fallback:
+     *   - Drop the inline 100% height.
+     *   - Set aspect-ratio from the poster’s intrinsic size if known, otherwise 16/9.
+     * This ensures the container participates in layout and that absolutely
+     * positioned poster/video children have a box to fill.
+     */
+    private _applyLayoutFallbackIfCollapsed(): void {
+      try {
+        const h = this._container.clientHeight;
+
+        // If we now have a usable height, and we previously applied the fallback,
+        // revert to the default fill sizing so the hero fills its 65vh container.
+        if (h > 1) {
+          if (this._layoutFallbackApplied) {
+            // Remove padding box sizing and restore 100% fill sizing.
+            this._container.style.removeProperty("padding-bottom");
+            this._container.style.height = "100%";
+            this._container.style.setProperty("block-size", "100%");
+            // Ensure any aspect-ratio leftovers are cleared.
+            (this._container.style as any).aspectRatio = "";
+            this._container.removeAttribute("data-size-fallback");
+            this._layoutFallbackApplied = false;
+          }
+
+          return;
+        }
+
+        // Prefer intrinsic poster dimensions when provided by the server.
+        const pw = parseInt(this._container.dataset.posterWidth || "", 10);
+        const ph = parseInt(this._container.dataset.posterHeight || "", 10);
+
+        const ratio = pw > 0 && ph > 0 ? pw / ph : 16 / 9;
+
+        // Override the inline height from sizeStrategy="fill" and switch to AR.
+        // Use a padding-bottom ratio box so old Safari (no CSS aspect-ratio) behaves.
+        this._container.style.removeProperty("block-size");
+        this._container.style.height = "0px";
+        this._container.style.paddingBottom = `${(1 / ratio) * 100}%`;
+        this._container.setAttribute("data-size-fallback", "padding");
+        this._layoutFallbackApplied = true;
+      } catch {
+        // Best-effort only; do not throw.
       }
     }
 
