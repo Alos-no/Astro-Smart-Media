@@ -1,5 +1,11 @@
 # @alos-no/astro-media
 
+## 1.3.3
+
+### Patch Changes
+
+- d331f32: Updated package.json
+
 ## 1.3.2
 
 ### Patch Changes
