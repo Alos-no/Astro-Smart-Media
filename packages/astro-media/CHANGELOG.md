@@ -1,5 +1,11 @@
 # @alos-no/astro-media
 
+## 1.3.2
+
+### Patch Changes
+
+- bd3079f: Updated README.md
+
 ## 1.3.1
 
 ### Patch Changes
