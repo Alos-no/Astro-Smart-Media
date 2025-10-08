@@ -51,6 +51,7 @@ ehthumbs.db
 Thumbs.db
 
 # Testing and coverage
+test-results/
 coverage/
 .nyc_output/
 cypress/screenshots/
