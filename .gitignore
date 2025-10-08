@@ -3,6 +3,9 @@ dist/
 .astro/
 docs/dev/
 
+# Other
+/packages/astro-media/README.md
+
 # Dependencies
 node_modules/
 .pnp.*

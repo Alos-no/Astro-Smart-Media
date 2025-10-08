@@ -8,7 +8,7 @@
     "type": "git",
     "url": "https://github.com/alos-no/astro-media.git"
   },
-  "license": "GPL-3.0-only",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=20.3.0 <21 || >=22.0.0"
   },
@@ -49,6 +49,8 @@
   "types": "./index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepack": "node ../../scripts/sync-readme.mjs copy packages/astro-media",
+    "postpack": "node ../../scripts/sync-readme.mjs clean packages/astro-media",
     "prepublishOnly": "pnpm run build",
     "publish:dry": "npm publish --access public --dry-run"
   }
